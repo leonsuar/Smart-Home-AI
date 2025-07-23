@@ -2,7 +2,6 @@ Flask==2.3.2
 transformers==4.30.2
 sentence-transformers==2.2.2
 torch==2.0.1
-llama-cpp-python==0.1.78
+llama-cpp-python==0.1.78 # Mantenemos esta versión
 huggingface_hub==0.14.1
-numpy==1.26.4
-# Prueba de verificaciòn.
+numpy==1.26.4 # CAMBIO AQUÍ: Pinning de NumPy
