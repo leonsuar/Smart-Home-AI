@@ -2,20 +2,16 @@
 FROM python:3.9-slim-bullseye
 
 # Establece el directorio de trabajo dentro del contenedor.
-# Los modelos se guardarán en /app/models (volumen), y el código en /app_code (montado desde el host).
 WORKDIR /app_code
 
 # Instala las dependencias básicas necesarias.
-# Ya no necesitamos build-essential, cmake, git, libblas-dev, liblapack-dev, libopenblas-dev, pkg-config
-# porque transformers no compila llama-cpp-python.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     python-is-python3 && rm -rf /var/lib/apt/lists/*
 
 # Copia los archivos de requisitos e instálalos.
-# requirements_ml.txt ahora contendrá 'transformers' y 'torch'.
-COPY requirements_ml.txt . # CAMBIO: Nombre del archivo de requisitos
-RUN pip install --no-cache-dir -r requirements_ml.txt # CAMBIO: Nombre del archivo de requisitos
+COPY requirements_ml.txt .
+RUN pip install --no-cache-dir -r requirements_ml.txt
 
 # Copia el código de la aplicación (ml_server.py)
 COPY ml_server.py .
@@ -24,5 +20,4 @@ COPY ml_server.py .
 EXPOSE 5001
 
 # Comando para ejecutar la aplicación Flask
-# Asegúrate de que el script se ejecute desde /app_code
 CMD ["python", "ml_server.py"]

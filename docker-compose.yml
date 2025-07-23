@@ -1,8 +1,10 @@
+version: '3.8'
+
 services:
   # Servicio para la aplicación Flask principal
   main_app:
     build:
-      context: ./main_app
+      context: ./main_app # ¡IMPORTANTE! El contexto es el directorio main_app
       dockerfile: Dockerfile_app
     ports:
       - "5000:5000"
@@ -12,28 +14,26 @@ services:
       - ./core_logic:/app/core_logic
     environment:
       - FLASK_ENV=development
-      # ¡NUEVO! Variables de entorno para la configuración MQTT
-      - MQTT_BROKER_ADDRESS=host.docker.internal # O la IP de tu Home Assistant si no es Docker
+      - MQTT_BROKER_ADDRESS=host.docker.internal
       - MQTT_BROKER_PORT=1883
-      - MQTT_USERNAME=your_mqtt_user # ¡REEMPLAZA ESTO!
-      - MQTT_PASSWORD=your_mqtt_password # ¡REEMPLAZA ESTO!
+      - MQTT_USERNAME=your_mqtt_user
+      - MQTT_PASSWORD=your_mqtt_password
     depends_on:
       - ml_server
 
-  # Servicio para el servidor de modelo de Machine Learning
+  # Servicio para el servidor de modelo de Machine Learning (solo embeddings)
   ml_server:
     build:
-      context: ./ml_server
+      context: ./ml_server # ¡IMPORTANTE! El contexto es el directorio ml_server
       dockerfile: Dockerfile_ml
     ports:
       - "5001:5001"
     volumes:
-      - ./ml_server:/app_code
+      - ./ml_server:/app_code # Monta el código de la aplicación en /app_code
     environment:
       - FLASK_ENV=development
     dns:
       - 8.8.8.8
 
-# Define los volúmenes nombrados
 volumes:
-  pytorch_models_data: # Se mantiene por si se usa en el ml_server, aunque no es estrictamente necesario para SentenceTransformer
+  pytorch_models_data:
