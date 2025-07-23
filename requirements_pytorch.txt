@@ -5,3 +5,4 @@ torch==2.0.1
 llama-cpp-python==0.1.78
 huggingface_hub==0.14.1
 numpy==1.26.4
+# Prueba de verificaciòn.
