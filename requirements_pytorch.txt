@@ -1,0 +1,7 @@
+Flask
+transformers
+sentence-transformers
+torch
+huggingface_hub
+numpy
+httpx
