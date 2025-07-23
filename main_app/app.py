@@ -1,245 +1,179 @@
-from flask import Flask, render_template, request, jsonify
-import re
+from flask import Flask, request, jsonify, render_template
+import asyncio
 import os
-import json # Importar json para cargar el archivo de entrenamiento
-import asyncio # Importar asyncio para manejar operaciones asíncronas
 import time # Importar time para time.strftime
 
 # Importar los módulos refactorizados
-from neuron_network import RedNeuronal
-from utils import normalize_text # Importar normalize_text desde utils
+from core_logic.neuron_network import RedNeuronal
+from core_logic.utils import normalize_text
+from core_logic.mqtt_client import MQTTClient # ¡NUEVO!
+from core_logic.home_assistant_api import HomeAssistantAPI # ¡NUEVO!
 
-
-# --- Configuración de Flask ---
 app = Flask(__name__)
-red_neuronal_global = None # Se inicializará de forma asíncrona
+
+# Configuración MQTT (¡Asegúrate de que estos valores coincidan con tu configuración de Home Assistant!)
+MQTT_BROKER_ADDRESS = os.getenv("MQTT_BROKER_ADDRESS", "localhost") # O la IP de tu HA
+MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "homeassistant_mqtt_user") # Tu usuario MQTT de HA
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "homeassistant_mqtt_password") # Tu contraseña MQTT de HA
+
+# Variables globales para MQTT y la red neuronal
+mqtt_client_global = None
+home_assistant_api_global = None
+red_neuronal_global = None
+
+# Almacenamiento temporal para confirmaciones de guardado pendientes
+pending_saves = {}
+
+@app.before_serving
+async def initialize_system():
+    """
+    Inicializa el cliente MQTT, la API de Home Assistant y la red neuronal
+    automáticamente al iniciar la aplicación.
+    """
+    global mqtt_client_global, home_assistant_api_global, red_neuronal_global
+    
+    print("INFO: Initializing MQTT client...")
+    mqtt_client_global = MQTTClient(
+        broker_address=MQTT_BROKER_ADDRESS,
+        port=MQTT_BROKER_PORT,
+        username=MQTT_USERNAME,
+        password=MQTT_PASSWORD
+    )
+    mqtt_client_global.connect()
+
+    print("INFO: Initializing Home Assistant API...")
+    home_assistant_api_global = HomeAssistantAPI(mqtt_client_global)
+
+    # Opcional: Suscribirse a tópicos de Home Assistant para recibir eventos
+    # Por ejemplo, para monitorear cambios de estado de sensores de movimiento
+    # mqtt_client_global.set_message_callback(handle_ha_event)
+    # home_assistant_api_global.subscribe_to_all_ha_states() # Suscribirse a todos los estados (puede ser ruidoso)
+    # home_assistant_api_global.subscribe_to_state_changes("motion_sensor_garden", domain="binary_sensor")
+
+    print("INFO: Initializing Neuron Network...")
+    red_neuronal_global = RedNeuronal(home_assistant_api=home_assistant_api_global) # ¡Pasa la instancia de HA API!
+    await red_neuronal_global.initialize_network_automatically()
+    print("INFO: System initialization complete.")
+
 
 @app.route('/')
 def index():
     """
-    Ruta principal que renderiza la plantilla HTML de la interfaz.
+    Sirve el archivo HTML principal de la interfaz de usuario.
     """
     return render_template('index.html')
+
+@app.route('/obtener_log')
+async def obtener_log():
+    """
+    Devuelve los mensajes de log actuales y el estado de la red.
+    """
+    if red_neuronal_global is None:
+        return jsonify(log=[{"tiempo": time.strftime("%H:%M:%S"), "mensaje": "El sistema aún se está inicializando. Por favor, espera un momento.", "tipo": "warning"}], estado_red=[]), 503
+    return jsonify({
+        'log': red_neuronal_global.mensajes,
+        'estado_red': red_neuronal_global.obtener_estado_red()
+    })
 
 @app.route('/enviar_comando', methods=['POST'])
 async def enviar_comando():
     """
-    Endpoint para recibir comandos de la interfaz web y ejecutarlos en la red neuronal.
+    Procesa los comandos enviados por el usuario.
     """
-    comando = request.json.get('comando', '').strip()
-    print(f"DEBUG: Comando recibido en el servidor: '{comando}'")
+    data = request.json
+    comando = data.get('comando', '').strip()
+    session_id = request.remote_addr # Usar la IP remota como un ID de sesión simple
 
     if red_neuronal_global is None:
-        # Usar time.strftime para obtener la hora actual
-        return jsonify(log=[{"tiempo": time.strftime("%H:%M:%S"), "mensaje": "La red neuronal aún se está inicializando. Por favor, espera un momento.", "tipo": "warning"}], estado_red=[]), 503
+        return jsonify(log=[{"tiempo": time.strftime("%H:%M:%S"), "mensaje": "El sistema aún se está inicializando. Por favor, espera un momento.", "tipo": "warning"}], estado_red=[]), 503
 
-    red_neuronal_global.log_mensaje(f"> {comando}", tipo="comando")
+    red_neuronal_global.log_mensaje(f"Tú: {comando}", tipo="comando")
 
-    respuesta = "Comando desconocido. Usa 'ayuda' para ver los comandos."
+    response_text = ""
+    should_offer_to_save = False # Bandera para indicar si se debe ofrecer guardar la respuesta
 
-    # Normalizar el comando para las comparaciones de regex
-    normalized_comando = normalize_text(comando)
-    print(f"DEBUG: Comando normalizado: '{normalized_comando}'")
+    # La lógica de manejo de comandos internos y de domótica ahora está en neuron_network.py
+    # get_local_or_llm_response ahora devuelve la respuesta y una bandera
+    llm_response_text, is_new_knowledge_candidate = await red_neuronal_global.get_local_or_llm_response(comando)
+    response_text = llm_response_text
+    should_offer_to_save = is_new_knowledge_candidate
 
-    partes = comando.split()
-    accion = partes[0].lower() if partes else ""
-    print(f"DEBUG: Acción extraída: '{accion}')")
+    red_neuronal_global.log_mensaje(f"IA: {response_text}", tipo="info")
 
-    # Intentar reconocer el nombre del usuario (usando el comando normalizado)
-    match_name = re.match(r"(me llamo|mi nombre es|yo soy|soy)\s*(.+)", normalized_comando)
-    if match_name:
-        name = match_name.group(2).strip()
-        red_neuronal_global.knowledge_manager.set_user_name(name)
-        respuesta = f"¡Hola, {name}! Un placer conocerte. He recordado tu nombre."
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
+    if should_offer_to_save:
+        # Almacena el prompt y la respuesta para una posible confirmación de guardado
+        pending_saves[session_id] = {
+            "prompt": comando,
+            "response": response_text
+        }
 
-    # Intentar reconocer el nombre de la IA (usando el comando normalizado)
-    match_ai_name = re.match(r"(prefiero que te llames|llamarte|te llamaras)\s*[:]?\s*(.+)", normalized_comando)
-    if match_ai_name:
-        ai_new_name = match_ai_name.group(2).strip()
-        red_neuronal_global.knowledge_manager.set_ai_name(ai_new_name)
-        respuesta = f"¡Entendido! Me llamaré {ai_new_name} de ahora en adelante. ¡Gracias por el nombre!"
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
+    return jsonify({
+        'log': red_neuronal_global.mensajes,
+        'estado_red': red_neuronal_global.obtener_estado_red(),
+        'response_text': response_text, # La respuesta final para mostrar en el chat
+        'should_offer_to_save': should_offer_to_save # Indicador para el frontend
+    })
 
+@app.route('/confirm_save', methods=['POST'])
+async def confirm_save():
+    """
+    Endpoint para que el usuario confirme si desea guardar una respuesta aprendida.
+    """
+    data = request.json
+    session_id = request.remote_addr
+    confirm_choice = data.get('choice') # 'yes' o 'no'
 
-    if accion == "crear_neurona" and len(partes) > 1:
-        neurona_id = partes[1]
-        try:
-            peso = float(partes[2]) if len(partes) > 2 else 0.5
-            from neuron_network import Neurona # Importar Neurona aquí si es necesario
-            nueva_neurona = Neurona(neurona_id=neurona_id, peso=peso)
-            if red_neuronal_global.añadir_neurona(nueva_neurona):
-                respuesta = f"Neurona '{neurona_id}' creada con peso {peso:.2f}."
-            else:
-                respuesta = red_neuronal_global.mensajes[-1]['mensaje']
-        except ValueError:
-            respuesta = "Error: El peso debe ser un número válido."
-        except Exception as e:
-            respuesta = f"Error inesperado al crear neurona: {e}"
-            print(f"ERROR: {e}")
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "replicar" and len(partes) > 1:
-        neurona_id = partes[1]
-        nueva = red_neuronal_global.replicar_neurona(neurona_id)
-        respuesta = red_neuronal_global.mensajes[-1]['mensaje'] if nueva else red_neuronal_global.mensajes[-1]['mensaje']
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "conectar" and len(partes) > 2:
-        id_origen, id_destino = partes[1], partes[2]
-        if red_neuronal_global.establecer_conexion(id_origen, id_destino):
-            respuesta = f"Conexión establecida: '{id_origen}' -> '{id_destino}'."
+    if session_id not in pending_saves:
+        red_neuronal_global.log_mensaje("Error: No hay una respuesta pendiente para guardar.", tipo="error")
+        return jsonify({'status': 'error', 'message': 'No hay una respuesta pendiente para guardar.'})
+
+    pending_data = pending_saves.pop(session_id) # Elimina la entrada pendiente
+    prompt_to_save = pending_data['prompt']
+    response_to_save = pending_data['response']
+
+    if confirm_choice == 'yes':
+        # Generar el embedding justo antes de guardar (para asegurar que sea el más reciente)
+        embedding = await red_neuronal_global.get_embedding_from_pytorch(prompt_to_save)
+        if embedding is not None:
+            await red_neuronal_global.train_with_feedback(prompt_to_save, response_to_save, embedding=embedding, save_memory=True)
+            red_neuronal_global.log_mensaje(f"Guardado: '{prompt_to_save}' -> '{response_to_save[:50]}...' en memoria.", tipo="info")
+            message = "¡Respuesta guardada en la memoria!"
         else:
-            respuesta = red_neuronal_global.mensajes[-1]['mensaje']
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "activar" and len(partes) > 2:
-        id_neurona = partes[1]
-        try:
-            entrada = float(partes[2])
-            red_neuronal_global.enviar_activacion(id_neurona, entrada)
-            respuesta = f"Activación enviada a '{id_neurona}' con entrada {entrada}."
-        except ValueError:
-            respuesta = "Error: La entrada para activar debe ser un número válido."
-        except Exception as e:
-            respuesta = f"Error al activar: {e}"
-            print(f"ERROR: {e}")
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "mutar" and len(partes) > 1:
-        neurona_id = partes[1]
-        try:
-            factor = float(partes[2]) if len(partes) > 2 else 0.1
-            if red_neuronal_global.mutar_neurona(neurona_id, factor):
-                respuesta = f"Neurona '{neurona_id}' mutada."
-            else:
-                respuesta = red_neuronal_global.mensajes[-1]['mensaje']
-        except ValueError:
-            respuesta = "Error: El factor de mutación debe ser un número válido."
-        except Exception as e:
-            respuesta = f"Error inesperado al mutar neurona: {e}"
-            print(f"ERROR: {e}")
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "listar_neuronas":
-        neuronas_info = red_neuronal_global.obtener_estado_red()
-        if neuronas_info:
-            respuesta = "Neuronas en la red:\n"
-            for n_data in neuronas_info:
-                respuesta += f"- ID: {n_data['id']}, Peso: {n_data['peso']}, Conexiones: {', '.join(n_data['conexiones']) if n_data['conexiones'] else 'Ninguna'}\n"
-        else:
-            respuesta = "No hay neuronas en la red."
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "limpiar":
-        red_neuronal_global.neuronas = {}
-        red_neuronal_global.mensajes = []
-        red_neuronal_global.knowledge_manager.clear_all_memory() # Limpiar toda la memoria
-        respuesta = "Red neuronal y consola limpiadas."
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "ayuda":
-        respuesta = """
-Comandos disponibles:
-- **crear_neurona [ID] [peso]**: Crea una nueva neurona. Ej: `crear_neurona N1 0.7`
-- **replicar [ID_original]**: Crea una copia de una neurona existente. Ej: `replicar N1`
-- **conectar [ID_origen] [ID_destino]**: Conecta dos neuronas. Ej: `conectar N1 N2`
-- **activar [ID_neurona] [entrada]**: Envía una señal a una neurona. Ej: `activar N1 100`
-- **mutar [ID_neurona] [factor]**: Mutar el peso de una neurona. Ej: `mutar N1 0.2`
-- **listar_neuronas**: Muestra todas las neuronas y sus conexiones.
-- **guardar_red**: Guarda el estado actual de la red en un archivo.
-- **limpiar**: Limpia la red y la consola.
-- **reiniciar_red**: Limpia la red y la vuelve a crear automáticamente (con conocimiento básico).
-- **calcular [operación] [número1] [número2]**: Realiza una operación aritmética. Ej: `calcular suma 5 3`, `calcular dividir 10 2`
-- **entrenar_lote**: Entrena la red con un conjunto de datos predefinido de preguntas y respuestas.
-- **ayuda**: Muestra esta ayuda.
----
-**Nota sobre IA:** La red neuronal intentará responder localmente (usando su memoria y conocimiento básico). Si no 'sabe' la respuesta, preguntará a Gemini y aprenderá de ella.
-        """
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "guardar_red":
-        red_neuronal_global.knowledge_manager.save_state() # Guardar el estado de la memoria
-        respuesta = "Estado de la red guardado manualmente."
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "reiniciar_red":
-        red_neuronal_global.neuronas = {}
-        red_neuronal_global.mensajes = []
-        red_neuronal_global.knowledge_manager.clear_all_memory() # Limpiar toda la memoria
-        await red_neuronal_global.initialize_network_automatically() # Llamar al método asíncrono de inicialización
-        respuesta = "Red neuronal reiniciada y creada automáticamente."
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "calcular" and len(partes) == 4:
-        operacion = partes[1].lower()
-        try:
-            num1 = float(partes[2])
-            num2 = float(partes[3])
-            resultado = None
-            if operacion == "suma":
-                resultado = num1 + num2
-            elif operacion == "resta":
-                resultado = num1 - num2
-            elif operacion == "multiplicar":
-                resultado = num1 * num2
-            elif operacion == "dividir":
-                if num2 != 0:
-                    resultado = num1 / num2
-                else:
-                    respuesta = "Error: División por cero no permitida."
-            
-            if resultado is not None:
-                respuesta = f"La red neuronal calculó '{operacion} {num1} {num2}': {resultado:.2f}"
-            
-        except ValueError:
-            respuesta = "Error: Los números para calcular deben ser válidos."
-        except Exception as e:
-            respuesta = f"Error al realizar la operación: {e}"
-            print(f"ERROR: {e}")
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-    elif accion == "entrenar_lote": # Nuevo comando para entrenamiento en lote
-        training_file = "training_data.json"
-        if not os.path.exists(training_file):
-            respuesta = f"Error: El archivo de entrenamiento '{training_file}' no se encontró en el directorio de la aplicación."
-            red_neuronal_global.log_mensaje(respuesta, tipo="error")
-        else:
-            try:
-                with open(training_file, 'r', encoding='utf-8') as f:
-                    training_data = json.load(f)
-                await red_neuronal_global.train_from_dataset(training_data) # Llamar al nuevo método de entrenamiento (ahora es async)
-                respuesta = f"Entrenamiento en lote completado con {len(training_data)} ejemplos. La red ha aprendido nuevas respuestas."
-                red_neuronal_global.log_mensaje(respuesta, tipo="info")
-            except json.JSONDecodeError:
-                respuesta = f"Error: El archivo '{training_file}' no es un JSON válido. Asegúrate de que esté bien formateado."
-                red_neuronal_global.log_mensaje(respuesta, tipo="error")
-            except Exception as e:
-                respuesta = f"Error al cargar o entrenar con el lote de datos: {e}"
-                red_neuronal_global.log_mensaje(respuesta, tipo="error")
+            red_neuronal_global.log_mensaje(f"Error: No se pudo generar embedding para guardar la respuesta.", tipo="error")
+            message = "Error al guardar la respuesta (no se pudo generar el embedding)."
     else:
-        # La lógica de respuesta local o LLM ahora está en RedNeuronal
-        respuesta_contenido = await red_neuronal_global.get_local_or_llm_response(comando)
-        respuesta = respuesta_contenido # La función ya devuelve el prefijo "Red Local:" o "IA (Gemini):"
-        red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        
-    return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
+        red_neuronal_global.log_mensaje(f"Descartado: '{prompt_to_save}' -> '{response_to_save[:50]}...'", tipo="info")
+        message = "Respuesta descartada."
 
-@app.route('/obtener_log')
-def obtener_log():
-    """
-    Endpoint para que la interfaz web obtenga los mensajes de la consola y el estado de la red periódicamente.
-    """
-    print("DEBUG: Solicitud recibida en /obtener_log")
-    if red_neuronal_global is None:
-        # Usar time.strftime para obtener la hora actual
-        return jsonify(log=[{"tiempo": time.strftime("%H:%M:%S"), "mensaje": "La red neuronal aún se está inicializando. Por favor, espera un momento.", "tipo": "warning"}], estado_red=[]), 503
-    return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
+    return jsonify({
+        'status': 'success',
+        'message': message,
+        'log': red_neuronal_global.mensajes,
+        'estado_red': red_neuronal_global.obtener_estado_red()
+    })
 
-# Función wrapper asíncrona para inicializar la red neuronal al inicio
-async def initialize_network_automatically_wrapper():
-    global red_neuronal_global
-    red_neuronal_global = RedNeuronal() # Crear la instancia de RedNeuronal
-    await red_neuronal_global.initialize_network_automatically() # Llamar al método asíncrono
+# Manejador de eventos MQTT entrantes (ejemplo)
+# Esta función sería llamada por el mqtt_client_global cuando reciba un mensaje
+def handle_ha_event(topic, payload):
+    # Aquí puedes procesar los eventos de Home Assistant y pasarlos a la red neuronal
+    # Por ejemplo:
+    if "homeassistant/binary_sensor/motion_garden/state" in topic and payload == "ON":
+        red_neuronal_global.log_mensaje("¡Alerta! Movimiento detectado en el jardín.", tipo="warning")
+        # Aquí podrías hacer que la red neuronal responda o tome una acción
+        # red_neuronal_global.process_security_event("motion_garden_detected")
+    elif "homeassistant/sensor/temperature_living_room/state" in topic:
+        red_neuronal_global.log_mensaje(f"Temperatura en sala: {payload}°C", tipo="info")
 
 if __name__ == '__main__':
-    # Ejecutar la inicialización automática de la red antes de iniciar el servidor Flask
-    # Usamos asyncio.run para ejecutar la función asíncrona
-    asyncio.run(initialize_network_automatically_wrapper())
+    # Asegúrate de que el directorio para los archivos de conocimiento exista
+    if not os.path.exists('./knowledge'): # Cambiado a 'knowledge' según la estructura
+        os.makedirs('./knowledge')
+    
+    # Flask 2.x+ con funciones async requiere un servidor ASGI como Gunicorn con un worker de Uvicorn.
+    # Para desarrollo, Flask puede ejecutarlo directamente, pero es posible que veas advertencias
+    # sobre el uso de `asyncio.run` o `app.before_serving` con el servidor de desarrollo predeterminado.
+    # Para producción, se recomienda:
+    # gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:5000 app:app
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
-    # Ejecutar la aplicación Flask.
-    # host='0.0.0.0' hace que el servidor sea accesible desde cualquier IP (útil en entornos de contenedores).
-    # port=5000 es el puerto estándar de Flask.
-    # debug=True permite recarga automática y depuración más fácil (desactivar en producción).
-    app.run(debug=True, host='0.0.0.0', port=5000)

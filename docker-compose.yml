@@ -2,46 +2,38 @@ services:
   # Servicio para la aplicación Flask principal
   main_app:
     build:
-      context: .
-      dockerfile: Dockerfile # Usa el Dockerfile en el directorio actual
+      context: ./main_app
+      dockerfile: Dockerfile_app
     ports:
-      - "5000:5000" # Mapea el puerto 5000 del contenedor al puerto 5000 del host
+      - "5000:5000"
     volumes:
-      - .:/app # Monta el directorio actual del host en /app del contenedor
+      - ./main_app:/app
+      - ./knowledge:/app/knowledge
+      - ./core_logic:/app/core_logic
     environment:
-      # Puedes añadir variables de entorno si es necesario para la app principal
       - FLASK_ENV=development
+      # ¡NUEVO! Variables de entorno para la configuración MQTT
+      - MQTT_BROKER_ADDRESS=host.docker.internal # O la IP de tu Home Assistant si no es Docker
+      - MQTT_BROKER_PORT=1883
+      - MQTT_USERNAME=your_mqtt_user # ¡REEMPLAZA ESTO!
+      - MQTT_PASSWORD=your_mqtt_password # ¡REEMPLAZA ESTO!
     depends_on:
-      - pytorch_model_server # Asegura que el servidor PyTorch se inicie antes que la app principal
+      - ml_server
 
-  # Servicio para el servidor de modelo PyTorch
-  pytorch_model_server:
+  # Servicio para el servidor de modelo de Machine Learning
+  ml_server:
     build:
-      context: .
-      dockerfile: Dockerfile.pytorch # Usa el Dockerfile específico para PyTorch
+      context: ./ml_server
+      dockerfile: Dockerfile_ml
     ports:
-      - "5001:5001" # Mapea el puerto 5001 del contenedor al puerto 5001 del host
+      - "5001:5001"
     volumes:
-      # ¡IMPORTANTE! Monta un volumen nombrado para los modelos.
-      # Esto asegura que el modelo descargado persista y no se descargue de nuevo.
-      - pytorch_models_data:/app/models 
-      # Monta el código de la aplicación. Asegúrate de que tu WORKDIR en Dockerfile.pytorch
-      # sea el lugar correcto para tus scripts (ej. /app_code o /app).
-      - .:/app_code 
+      - ./ml_server:/app_code
     environment:
-      # Puedes añadir variables de entorno si es necesario para el servidor PyTorch
       - FLASK_ENV=development
-    dns: # Configuración de DNS para el contenedor
-      - 8.8.8.8 # Usa los servidores DNS públicos de Google
-    # Si necesitas GPU, descomenta la siguiente línea (requiere NVIDIA Docker runtime)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    dns:
+      - 8.8.8.8
 
 # Define los volúmenes nombrados
 volumes:
-  pytorch_models_data:
+  pytorch_models_data: # Se mantiene por si se usa en el ml_server, aunque no es estrictamente necesario para SentenceTransformer
