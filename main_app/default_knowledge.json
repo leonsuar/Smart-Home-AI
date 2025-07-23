@@ -1,0 +1,44 @@
+{
+    "general_knowledge": [
+        {
+            "prompt": "¿Cuál es la capital de Francia?",
+            "response": "La capital de Francia es París."
+        },
+        {
+            "prompt": "¿Quién escribió 'Don Quijote de la Mancha'?",
+            "response": "Miguel de Cervantes Saavedra escribió 'Don Quijote de la Mancha'."
+        },
+        {
+            "prompt": "¿Cuál es el planeta más grande del sistema solar?",
+            "response": "Júpiter es el planeta más grande de nuestro sistema solar."
+        },
+        {
+            "prompt": "¿Cómo funciona la fotosíntesis?",
+            "response": "La fotosíntesis es el proceso mediante el cual las plantas, algas y algunas bacterias convierten la energía de la luz en energía química, en forma de azúcares."
+        },
+        {
+            "prompt": "¿Qué es la inteligencia artificial?",
+            "response": "La inteligencia artificial (IA) es un campo de la informática que busca crear máquinas que puedan realizar tareas que normalmente requieren inteligencia humana."
+        },
+        {
+            "prompt": "¿Cuál es la moneda de Japón?",
+            "response": "La moneda de Japón es el Yen japonés (JPY)."
+        },
+        {
+            "prompt": "¿Quién fue Albert Einstein?",
+            "response": "Albert Einstein fue un físico teórico alemán que desarrolló la teoría de la relatividad, uno de los dos pilares de la física moderna."
+        },
+        {
+            "prompt": "¿Cuál es el océano más grande del mundo?",
+            "response": "El océano más grande del mundo es el Océano Pacífico."
+        },
+        {
+            "prompt": "¿Qué es un agujero negro?",
+            "response": "Un agujero negro es una región del espacio-tiempo donde la gravedad es tan fuerte que nada, ni siquiera la luz, puede escapar."
+        },
+        {
+            "prompt": "¿Cuál es la montaña más alta del mundo?",
+            "response": "El Monte Everest es la montaña más alta del mundo, ubicada en la cordillera del Himalaya."
+        }
+    ]
+}

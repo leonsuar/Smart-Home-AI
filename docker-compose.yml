@@ -1,0 +1,47 @@
+services:
+  # Servicio para la aplicación Flask principal
+  main_app:
+    build:
+      context: .
+      dockerfile: Dockerfile # Usa el Dockerfile en el directorio actual
+    ports:
+      - "5000:5000" # Mapea el puerto 5000 del contenedor al puerto 5000 del host
+    volumes:
+      - .:/app # Monta el directorio actual del host en /app del contenedor
+    environment:
+      # Puedes añadir variables de entorno si es necesario para la app principal
+      - FLASK_ENV=development
+    depends_on:
+      - pytorch_model_server # Asegura que el servidor PyTorch se inicie antes que la app principal
+
+  # Servicio para el servidor de modelo PyTorch
+  pytorch_model_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.pytorch # Usa el Dockerfile específico para PyTorch
+    ports:
+      - "5001:5001" # Mapea el puerto 5001 del contenedor al puerto 5001 del host
+    volumes:
+      # ¡IMPORTANTE! Monta un volumen nombrado para los modelos.
+      # Esto asegura que el modelo descargado persista y no se descargue de nuevo.
+      - pytorch_models_data:/app/models 
+      # Monta el código de la aplicación. Asegúrate de que tu WORKDIR en Dockerfile.pytorch
+      # sea el lugar correcto para tus scripts (ej. /app_code o /app).
+      - .:/app_code 
+    environment:
+      # Puedes añadir variables de entorno si es necesario para el servidor PyTorch
+      - FLASK_ENV=development
+    dns: # Configuración de DNS para el contenedor
+      - 8.8.8.8 # Usa los servidores DNS públicos de Google
+    # Si necesitas GPU, descomenta la siguiente línea (requiere NVIDIA Docker runtime)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+# Define los volúmenes nombrados
+volumes:
+  pytorch_models_data:

@@ -1,21 +1,13 @@
-# Importaciones necesarias para la aplicación
-from flask import Flask, render_template, request, jsonify # Flask para el servidor web
-import uuid # Para generar IDs únicos para cada neurona
-import random # Para la mutación aleatoria de los pesos y conexiones
-import time # Para registrar la hora de los mensajes en la consola
-import shutil # Para verificar el uso del disco
-import os # Para obtener la ruta del directorio actual
-import json # Para manejar la serialización/deserialización de JSON
-import asyncio # Para manejar operaciones asíncronas
-import httpx # Para realizar solicitudes HTTP asíncronas
-import psutil # Para la monitorización de recursos del sistema (RAM, CPU)
-import re # Para expresiones regulares para el reconocimiento de patrones
+from flask import Flask, render_template, request, jsonify
+import re
+import os
+import json # Importar json para cargar el archivo de entrenamiento
+import asyncio # Importar asyncio para manejar operaciones asíncronas
+import time # Importar time para time.strftime
 
-# Importar los nuevos módulos
+# Importar los módulos refactorizados
 from neuron_network import RedNeuronal
-from knowledge_manager import KnowledgeManager # Asegurarse de que KnowledgeManager esté importado
-from llm_service import generate_llm_response
-from utils import get_available_ram_mb, get_cpu_core_count, get_disk_usage_percentage, normalize_text # Importar normalize_text
+from utils import normalize_text # Importar normalize_text desde utils
 
 
 # --- Configuración de Flask ---
@@ -60,7 +52,6 @@ async def enviar_comando():
         red_neuronal_global.knowledge_manager.set_user_name(name)
         respuesta = f"¡Hola, {name}! Un placer conocerte. He recordado tu nombre."
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        red_neuronal_global.knowledge_manager.save_state() # Guardar después de establecer el nombre
         return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
 
     # Intentar reconocer el nombre de la IA (usando el comando normalizado)
@@ -70,7 +61,6 @@ async def enviar_comando():
         red_neuronal_global.knowledge_manager.set_ai_name(ai_new_name)
         respuesta = f"¡Entendido! Me llamaré {ai_new_name} de ahora en adelante. ¡Gracias por el nombre!"
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        red_neuronal_global.knowledge_manager.save_state() # Guardar después de establecer el nombre
         return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
 
 
@@ -79,10 +69,9 @@ async def enviar_comando():
         try:
             peso = float(partes[2]) if len(partes) > 2 else 0.5
             from neuron_network import Neurona # Importar Neurona aquí si es necesario
-            nueva_neurona = Neurona(neurona_id=neurona_id, peso=peso) 
+            nueva_neurona = Neurona(neurona_id=neurona_id, peso=peso)
             if red_neuronal_global.añadir_neurona(nueva_neurona):
                 respuesta = f"Neurona '{neurona_id}' creada con peso {peso:.2f}."
-                red_neuronal_global.knowledge_manager.save_state() # Guardar después de crear
             else:
                 respuesta = red_neuronal_global.mensajes[-1]['mensaje']
         except ValueError:
@@ -95,14 +84,11 @@ async def enviar_comando():
         neurona_id = partes[1]
         nueva = red_neuronal_global.replicar_neurona(neurona_id)
         respuesta = red_neuronal_global.mensajes[-1]['mensaje'] if nueva else red_neuronal_global.mensajes[-1]['mensaje']
-        if nueva:
-            red_neuronal_global.knowledge_manager.save_state() # Guardar después de replicar
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
     elif accion == "conectar" and len(partes) > 2:
         id_origen, id_destino = partes[1], partes[2]
         if red_neuronal_global.establecer_conexion(id_origen, id_destino):
             respuesta = f"Conexión establecida: '{id_origen}' -> '{id_destino}'."
-            red_neuronal_global.knowledge_manager.save_state() # Guardar después de conectar
         else:
             respuesta = red_neuronal_global.mensajes[-1]['mensaje']
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
@@ -124,7 +110,6 @@ async def enviar_comando():
             factor = float(partes[2]) if len(partes) > 2 else 0.1
             if red_neuronal_global.mutar_neurona(neurona_id, factor):
                 respuesta = f"Neurona '{neurona_id}' mutada."
-                red_neuronal_global.knowledge_manager.save_state() # Guardar después de mutar
             else:
                 respuesta = red_neuronal_global.mensajes[-1]['mensaje']
         except ValueError:
@@ -148,7 +133,6 @@ async def enviar_comando():
         red_neuronal_global.knowledge_manager.clear_all_memory() # Limpiar toda la memoria
         respuesta = "Red neuronal y consola limpiadas."
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        red_neuronal_global.knowledge_manager.save_state() # Guardar después de limpiar
     elif accion == "ayuda":
         respuesta = """
 Comandos disponibles:
@@ -179,7 +163,6 @@ Comandos disponibles:
         await red_neuronal_global.initialize_network_automatically() # Llamar al método asíncrono de inicialización
         respuesta = "Red neuronal reiniciada y creada automáticamente."
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        red_neuronal_global.knowledge_manager.save_state() # Guardar después de reiniciar
     elif accion == "calcular" and len(partes) == 4:
         operacion = partes[1].lower()
         try:
@@ -227,11 +210,9 @@ Comandos disponibles:
                 red_neuronal_global.log_mensaje(respuesta, tipo="error")
     else:
         # La lógica de respuesta local o LLM ahora está en RedNeuronal
-        respuesta_contenido, debe_guardar = await red_neuronal_global.get_local_or_llm_response(comando)
+        respuesta_contenido = await red_neuronal_global.get_local_or_llm_response(comando)
         respuesta = respuesta_contenido # La función ya devuelve el prefijo "Red Local:" o "IA (Gemini):"
         red_neuronal_global.log_mensaje(respuesta, tipo="info")
-        if debe_guardar:
-            red_neuronal_global.knowledge_manager.save_state() # Guardar si la respuesta fue generada por LLM
         
     return jsonify(log=red_neuronal_global.mensajes, estado_red=red_neuronal_global.obtener_estado_red())
 

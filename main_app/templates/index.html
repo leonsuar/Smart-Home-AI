@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* bg-gray-900 */
+            color: #e2e8f0; /* text-gray-200 */
+        }
+        .chat-container {
+            height: calc(100vh - 4rem); /* Ajusta la altura para dejar espacio para el input */
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+        .message-bubble {
+            max-width: 80%;
+            border-radius: 0.75rem; /* rounded-xl */
+            padding: 0.5rem 1rem;
+            margin-bottom: 0.5rem;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #4c51bf; /* bg-indigo-700 */
+            align-self: flex-end;
+        }
+        .ai-message {
+            background-color: #2d3748; /* bg-gray-700 */
+            align-self: flex-start;
+        }
+        .info-message {
+            background-color: #2a4365; /* bg-blue-800 */
+            font-style: italic;
+            text-align: center;
+        }
+        .warning-message {
+            background-color: #975a16; /* bg-orange-700 */
+            font-style: italic;
+            text-align: center;
+            color: #fff;
+        }
+        .error-message {
+            background-color: #c53030; /* bg-red-700 */
+            font-style: italic;
+            text-align: center;
+            color: #fff;
+        }
+        .neuron-card {
+            background-color: #2d3748; /* bg-gray-700 */
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem; /* text-sm */
+        }
+    </style>
+</head>
+<body>
+    <div class="flex-grow flex flex-col md:flex-row p-4 space-y-4 md:space-y-0 md:space-x-4">
+        <!-- Columna de Chat -->
+        <div class="flex flex-col w-full md:w-2/3 bg-gray-800 rounded-lg shadow-lg p-4">
+            <div id="chat-log" class="chat-container flex flex-col flex-grow p-2 mb-4 bg-gray-700 rounded-lg">
+                <!-- Los mensajes del chat se insertarán aquí -->
+            </div>
+            <div class="flex space-x-2">
+                <input type="text" id="command-input" class="flex-grow p-3 rounded-lg bg-gray-700 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Escribe tu comando o pregunta...">
+                <button id="send-button" class="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Enviar</button>
+            </div>
+        </div>
+
+        <!-- Columna de Estado de la Red -->
+        <div class="flex flex-col w-full md:w-1/3 bg-gray-800 rounded-lg shadow-lg p-4">
+            <h2 class="text-xl font-semibold mb-4 text-center">Estado de la Red Neuronal</h2>
+            <div id="network-state-log" class="flex-grow overflow-y-auto p-2 bg-gray-700 rounded-lg">
+                <!-- El estado de la red se insertará aquí -->
+                <p class="text-center text-gray-400">Cargando estado de la red...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatLog = document.getElementById('chat-log');
+        const commandInput = document.getElementById('command-input');
+        const sendButton = document.getElementById('send-button');
+        const networkStateLog = document.getElementById('network-state-log');
+
+        function addMessage(message, type = 'ai') {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message-bubble');
+
+            let typeClass = 'ai-message';
+            if (type === 'user') {
+                typeClass = 'user-message';
+            } else if (type === 'info') {
+                typeClass = 'info-message';
+            } else if (type === 'warning') {
+                typeClass = 'warning-message';
+            } else if (type === 'error') {
+                typeClass = 'error-message';
+            }
+
+            messageElement.classList.add(typeClass);
+            messageElement.textContent = `[${message.tiempo}] ${message.mensaje}`;
+            chatLog.appendChild(messageElement);
+            chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll to bottom
+        }
+
+        function updateNetworkState(state) {
+            networkStateLog.innerHTML = ''; // Clear previous state
+            if (state && state.length > 0) {
+                state.forEach(neuron => {
+                    const neuronCard = document.createElement('div');
+                    neuronCard.classList.add('neuron-card');
+                    neuronCard.innerHTML = `
+                        <p class="font-bold text-indigo-300">ID: ${neuron.id}</p>
+                        <p>Peso: ${neuron.peso}</p>
+                        <p>Conexiones: ${neuron.conexiones.length > 0 ? neuron.conexiones.join(', ') : 'Ninguna'}</p>
+                    `;
+                    networkStateLog.appendChild(neuronCard);
+                });
+            } else {
+                networkStateLog.innerHTML = '<p class="text-center text-gray-400">No hay neuronas activas.</p>';
+            }
+        }
+
+        async function sendCommand() {
+            const command = commandInput.value.trim();
+            if (command) {
+                // addMessage({ tiempo: new Date().toLocaleTimeString(), mensaje: command }, 'user'); // Added by server now
+                commandInput.value = ''; // Clear input immediately
+                try {
+                    const response = await fetch('/enviar_comando', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ comando: command })
+                    });
+                    const data = await response.json();
+                    if (data.log) {
+                        data.log.forEach(msg => addMessage(msg, msg.tipo));
+                    }
+                    if (data.estado_red) {
+                        updateNetworkState(data.estado_red);
+                    }
+                } catch (error) {
+                    console.error('Error al enviar comando:', error);
+                    addMessage({ tiempo: new Date().toLocaleTimeString(), mensaje: `Error de conexión: ${error.message}` }, 'error');
+                }
+            }
+        }
+
+        sendButton.addEventListener('click', sendCommand);
+        commandInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendCommand();
+            }
+        });
+
+        // Función para obtener el log y el estado de la red periódicamente
+        async function fetchLogAndState() {
+            try {
+                const response = await fetch('/obtener_log');
+                const data = await response.json();
+                if (data.log) {
+                    // Limpiar el log actual y añadir todos los mensajes nuevos
+                    chatLog.innerHTML = ''; 
+                    data.log.forEach(msg => addMessage(msg, msg.tipo));
+                }
+                if (data.estado_red) {
+                    updateNetworkState(data.estado_red);
+                }
+            } catch (error) {
+                console.error('Error al obtener log y estado de la red:', error);
+                // No añadir un mensaje de error persistente en el chat por cada fallo de fetch
+            }
+        }
+
+        // Obtener el log y el estado de la red al cargar la página
+        fetchLogAndState();
+        // Actualizar cada 2 segundos
+        setInterval(fetchLogAndState, 2000);
+    </script>
+</body>
+</html>
