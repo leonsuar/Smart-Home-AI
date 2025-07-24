@@ -1,5 +1,9 @@
-Flask==2.3.2
+Flask[async]==2.3.2
 httpx
+sentence-transformers
+numpy
+torch
+asgiref
+greenlet
 psutil
-numpy==1.26.4
 paho-mqtt # ¡NUEVO!

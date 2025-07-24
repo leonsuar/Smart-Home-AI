@@ -11,15 +11,25 @@ RUN apt-get update && \
     pip install --upgrade pip
 
 # Copia los archivos de requisitos e instálalos
-COPY requirements_app.txt .
-RUN pip install --no-cache-dir -r requirements_app.txt
+COPY main_app/requirements_app.txt ./main_app/requirements_app.txt
+RUN pip install --no-cache-dir -r ./main_app/requirements_app.txt
 
-# Copia todos los archivos de tu aplicación al contenedor
-# Esto incluye app.py, y los directorios core_logic, knowledge, static, templates
-COPY . .
+# Copia los directorios necesarios desde el contexto (raíz del proyecto)
+COPY main_app/ ./main_app/
+COPY core_logic/ ./core_logic/
+COPY knowledge/ ./knowledge/
+COPY main_app/static/ ./main_app/static/
+COPY main_app/templates/ ./main_app/templates/
+
+# Comando de depuración para listar el contenido de core_logic (puedes eliminarlo después de que funcione)
+RUN echo "Contenido de /app/core_logic durante la construcción:"
+RUN ls -l /app/core_logic
 
 # Expone el puerto en el que se ejecutará la aplicación Flask
 EXPOSE 5000
 
+# Añade el directorio /app a la ruta de búsqueda de Python
+ENV PYTHONPATH=/app
+
 # Define el comando para ejecutar la aplicación
-CMD ["python", "app.py"]
+CMD ["python", "main_app/app.py"]

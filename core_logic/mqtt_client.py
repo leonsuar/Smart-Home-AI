@@ -7,10 +7,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class MQTTClient:
     def __init__(self, broker_address, port=1883, username=None, password=None, client_id="smart_home_ai_client"):
-        self.broker_address = 192.168.1.11
-        self.port = 1883
-        self.username = leo
-        self.password = Kolke.2576
+        # broker_address ya debería ser un string cuando se pasa desde app.py
+        self.broker_address = broker_address 
+        self.port = port
+        self.username = username
+        self.password = password
         self.client_id = client_id
         self.client = mqtt.Client(client_id=self.client_id, protocol=mqtt.MQTTv311)
         self.on_message_callback = None # Callback para manejar mensajes entrantes
@@ -107,34 +108,33 @@ class MQTTClient:
 # Ejemplo de uso (para pruebas, no se ejecuta directamente en la app)
 if __name__ == "__main__":
     # Configura tu broker MQTT de Home Assistant aquí
-    # Si Home Assistant está en Docker, usa el nombre del servicio (ej. 'homeassistant')
-    # Si está en la misma red, usa su IP (ej. '192.168.1.100')
-    BROKER_ADDRESS = "localhost" # Cambia esto a la IP/hostname de tu broker MQTT
-    BROKER_PORT = 1883
-    MQTT_USERNAME = "your_mqtt_user" # Reemplaza con tu usuario MQTT de Home Assistant
-    MQTT_PASSWORD = "your_mqtt_password" # Reemplaza con tu contraseña MQTT de Home Assistant
+    # ¡IMPORTANTE! Las IPs deben ser strings.
+    BROKER_ADDRESS_TEST = "192.168.1.11" # ¡CORREGIDO! Como string
+    BROKER_PORT_TEST = 1883
+    MQTT_USERNAME_TEST = "leo"
+    MQTT_PASSWORD_TEST = "Kolke.2576"
 
-    mqtt_client = MQTTClient(BROKER_ADDRESS, BROKER_PORT, MQTT_USERNAME, MQTT_PASSWORD)
+    mqtt_client_test = MQTTClient(BROKER_ADDRESS_TEST, BROKER_PORT_TEST, MQTT_USERNAME_TEST, MQTT_PASSWORD_TEST)
 
     def handle_incoming_message(topic, payload):
         print(f"Callback de la aplicación: Recibido en {topic}: {payload}")
 
-    mqtt_client.set_message_callback(handle_incoming_message)
-    mqtt_client.connect()
+    mqtt_client_test.set_message_callback(handle_incoming_message)
+    mqtt_client_test.connect()
 
     # Publicar un mensaje de prueba después de un breve retraso
     time.sleep(2) 
-    mqtt_client.publish("home/test/status", "Hello from Smart Home AI!")
-    mqtt_client.publish("home/light/living_room/set", {"state": "ON", "brightness": 255})
+    mqtt_client_test.publish("home/test/status", "Hello from Smart Home AI!")
+    mqtt_client_test.publish("home/light/living_room/set", {"state": "ON", "brightness": 255})
 
     # Suscribirse a un tópico para ver mensajes
-    mqtt_client.subscribe("home/+/status")
+    mqtt_client_test.subscribe("home/+/status")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("Desconectando MQTT...")
-        mqtt_client.disconnect()
+        mqtt_client_test.disconnect()
         print("Desconectado.")
 

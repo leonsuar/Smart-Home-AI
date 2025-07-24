@@ -1,21 +1,27 @@
 from flask import Flask, request, jsonify, render_template
 import asyncio
 import os
-import time # Importar time para time.strftime
+import time
+import logging # Importar logging
 
-# Importar los módulos refactorizados
+# Configurar logging básico para la aplicación
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Importar los módulos con rutas absolutas
 from core_logic.neuron_network import RedNeuronal
 from core_logic.utils import normalize_text
-from core_logic.mqtt_client import MQTTClient # ¡NUEVO!
-from core_logic.home_assistant_api import HomeAssistantAPI # ¡NUEVO!
+from core_logic.mqtt_client import MQTTClient
+from core_logic.home_assistant_api import HomeAssistantAPI
 
 app = Flask(__name__)
 
 # Configuración MQTT (¡Asegúrate de que estos valores coincidan con tu configuración de Home Assistant!)
-MQTT_BROKER_ADDRESS = os.getenv("MQTT_BROKER_ADDRESS", "localhost") # O la IP de tu HA
+# Estos valores se obtienen de las variables de entorno definidas en docker-compose.yml
+MQTT_BROKER_ADDRESS = os.getenv("MQTT_BROKER_ADDRESS", "localhost")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME", "homeassistant_mqtt_user") # Tu usuario MQTT de HA
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "homeassistant_mqtt_password") # Tu contraseña MQTT de HA
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "homeassistant_mqtt_user")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "homeassistant_mqtt_password")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Variables globales para MQTT y la red neuronal
 mqtt_client_global = None
@@ -25,15 +31,14 @@ red_neuronal_global = None
 # Almacenamiento temporal para confirmaciones de guardado pendientes
 pending_saves = {}
 
-@app.before_serving
-async def initialize_system():
+# Función de inicialización asíncrona
+async def initialize_system_async(): # Renombrado para claridad, no es un decorador
     """
-    Inicializa el cliente MQTT, la API de Home Assistant y la red neuronal
-    automáticamente al iniciar la aplicación.
+    Inicializa el cliente MQTT, la API de Home Assistant y la red neuronal.
     """
     global mqtt_client_global, home_assistant_api_global, red_neuronal_global
     
-    print("INFO: Initializing MQTT client...")
+    logging.info("Initializing MQTT client...")
     mqtt_client_global = MQTTClient(
         broker_address=MQTT_BROKER_ADDRESS,
         port=MQTT_BROKER_PORT,
@@ -42,19 +47,18 @@ async def initialize_system():
     )
     mqtt_client_global.connect()
 
-    print("INFO: Initializing Home Assistant API...")
+    logging.info("Initializing Home Assistant API...")
     home_assistant_api_global = HomeAssistantAPI(mqtt_client_global)
 
     # Opcional: Suscribirse a tópicos de Home Assistant para recibir eventos
-    # Por ejemplo, para monitorear cambios de estado de sensores de movimiento
     # mqtt_client_global.set_message_callback(handle_ha_event)
-    # home_assistant_api_global.subscribe_to_all_ha_states() # Suscribirse a todos los estados (puede ser ruidoso)
+    # home_assistant_api_global.subscribe_to_all_ha_states()
     # home_assistant_api_global.subscribe_to_state_changes("motion_sensor_garden", domain="binary_sensor")
 
-    print("INFO: Initializing Neuron Network...")
-    red_neuronal_global = RedNeuronal(home_assistant_api=home_assistant_api_global) # ¡Pasa la instancia de HA API!
+    logging.info("Initializing Neuron Network...")
+    red_neuronal_global = RedNeuronal(home_assistant_api=home_assistant_api_global)
     await red_neuronal_global.initialize_network_automatically()
-    print("INFO: System initialization complete.")
+    logging.info("System initialization complete.")
 
 
 @app.route('/')
@@ -83,7 +87,7 @@ async def enviar_comando():
     """
     data = request.json
     comando = data.get('comando', '').strip()
-    session_id = request.remote_addr # Usar la IP remota como un ID de sesión simple
+    session_id = request.remote_addr
 
     if red_neuronal_global is None:
         return jsonify(log=[{"tiempo": time.strftime("%H:%M:%S"), "mensaje": "El sistema aún se está inicializando. Por favor, espera un momento.", "tipo": "warning"}], estado_red=[]), 503
@@ -91,10 +95,8 @@ async def enviar_comando():
     red_neuronal_global.log_mensaje(f"Tú: {comando}", tipo="comando")
 
     response_text = ""
-    should_offer_to_save = False # Bandera para indicar si se debe ofrecer guardar la respuesta
+    should_offer_to_save = False
 
-    # La lógica de manejo de comandos internos y de domótica ahora está en neuron_network.py
-    # get_local_or_llm_response ahora devuelve la respuesta y una bandera
     llm_response_text, is_new_knowledge_candidate = await red_neuronal_global.get_local_or_llm_response(comando)
     response_text = llm_response_text
     should_offer_to_save = is_new_knowledge_candidate
@@ -102,7 +104,6 @@ async def enviar_comando():
     red_neuronal_global.log_mensaje(f"IA: {response_text}", tipo="info")
 
     if should_offer_to_save:
-        # Almacena el prompt y la respuesta para una posible confirmación de guardado
         pending_saves[session_id] = {
             "prompt": comando,
             "response": response_text
@@ -111,8 +112,8 @@ async def enviar_comando():
     return jsonify({
         'log': red_neuronal_global.mensajes,
         'estado_red': red_neuronal_global.obtener_estado_red(),
-        'response_text': response_text, # La respuesta final para mostrar en el chat
-        'should_offer_to_save': should_offer_to_save # Indicador para el frontend
+        'response_text': response_text,
+        'should_offer_to_save': should_offer_to_save
     })
 
 @app.route('/confirm_save', methods=['POST'])
@@ -122,18 +123,17 @@ async def confirm_save():
     """
     data = request.json
     session_id = request.remote_addr
-    confirm_choice = data.get('choice') # 'yes' o 'no'
+    confirm_choice = data.get('choice')
 
     if session_id not in pending_saves:
         red_neuronal_global.log_mensaje("Error: No hay una respuesta pendiente para guardar.", tipo="error")
         return jsonify({'status': 'error', 'message': 'No hay una respuesta pendiente para guardar.'})
 
-    pending_data = pending_saves.pop(session_id) # Elimina la entrada pendiente
+    pending_data = pending_saves.pop(session_id)
     prompt_to_save = pending_data['prompt']
     response_to_save = pending_data['response']
 
     if confirm_choice == 'yes':
-        # Generar el embedding justo antes de guardar (para asegurar que sea el más reciente)
         embedding = await red_neuronal_global.get_embedding_from_pytorch(prompt_to_save)
         if embedding is not None:
             await red_neuronal_global.train_with_feedback(prompt_to_save, response_to_save, embedding=embedding, save_memory=True)
@@ -154,26 +154,17 @@ async def confirm_save():
     })
 
 # Manejador de eventos MQTT entrantes (ejemplo)
-# Esta función sería llamada por el mqtt_client_global cuando reciba un mensaje
 def handle_ha_event(topic, payload):
-    # Aquí puedes procesar los eventos de Home Assistant y pasarlos a la red neuronal
-    # Por ejemplo:
     if "homeassistant/binary_sensor/motion_garden/state" in topic and payload == "ON":
         red_neuronal_global.log_mensaje("¡Alerta! Movimiento detectado en el jardín.", tipo="warning")
-        # Aquí podrías hacer que la red neuronal responda o tome una acción
-        # red_neuronal_global.process_security_event("motion_garden_detected")
     elif "homeassistant/sensor/temperature_living_room/state" in topic:
         red_neuronal_global.log_mensaje(f"Temperatura en sala: {payload}°C", tipo="info")
 
 if __name__ == '__main__':
-    # Asegúrate de que el directorio para los archivos de conocimiento exista
-    if not os.path.exists('./knowledge'): # Cambiado a 'knowledge' según la estructura
+    if not os.path.exists('./knowledge'):
         os.makedirs('./knowledge')
     
-    # Flask 2.x+ con funciones async requiere un servidor ASGI como Gunicorn con un worker de Uvicorn.
-    # Para desarrollo, Flask puede ejecutarlo directamente, pero es posible que veas advertencias
-    # sobre el uso de `asyncio.run` o `app.before_serving` con el servidor de desarrollo predeterminado.
-    # Para producción, se recomienda:
-    # gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:5000 app:app
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Ejecutar la inicialización asíncrona del sistema antes de iniciar la aplicación Flask
+    asyncio.run(initialize_system_async())
 
+    app.run(host='0.0.0.0', port=5000, debug=True)
