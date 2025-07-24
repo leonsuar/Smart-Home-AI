@@ -8,17 +8,17 @@ import asyncio
 # Importaciones de módulos locales
 from core_logic.utils import get_available_ram_mb, get_cpu_core_count, get_disk_usage_percentage, normalize_text
 from core_logic.home_assistant_api import HomeAssistantAPI
-from core_logic.llm_service import LLMService
+from core_logic.llm_service import LLMService, HA_COMMAND_SCHEMA # Importar el esquema
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class RedNeuronal:
-    def __init__(self, home_assistant_api: HomeAssistantAPI, ml_server_ip: str, gemini_api_key: str): # ¡NUEVOS PARÁMETROS!
+    def __init__(self, home_assistant_api: HomeAssistantAPI, ml_server_ip: str, gemini_api_key: str):
         self.memoria = self._cargar_memoria()
         self.mensajes = [] 
         self.home_assistant_api = home_assistant_api
-        self.llm_service = LLMService(api_key=gemini_api_key) # Pasar la clave de Gemini al LLMService
-        self.ml_server_url = f"http://{ml_server_ip}:5001/get_embedding" # Usar la IP del ML Server
+        self.llm_service = LLMService(api_key=gemini_api_key)
+        self.ml_server_url = f"http://{ml_server_ip}:5001/get_embedding"
         self.initial_knowledge_loaded = False 
 
     def _cargar_memoria(self):
@@ -34,7 +34,7 @@ class RedNeuronal:
                     logging.info(f"Memoria cargada desde '{memoria_path}'. {len(memoria_cargada)} entradas.")
                     return memoria_cargada
                 except json.JSONDecodeError as e:
-                    logging.error(f"Error al decodificar JSON de '{memoria_path}': {e}. Iniciando con memoria vacía.")
+                    logging.error(f"Error al decodificar JSON de '{memoria_path}': {e}. Se ignorará el archivo corrupto.")
                     os.rename(memoria_path, memoria_path + ".bak")
                     logging.info(f"Archivo corrupto '{memoria_path}' renombrado a '{memoria_path}.bak'.")
         logging.info(f"No se encontró '{memoria_path}' o está vacío/corrupto. Iniciando con memoria vacía.")
@@ -144,18 +144,72 @@ class RedNeuronal:
             self.log_mensaje("Fallo al conectar con ML Server. La IA puede no funcionar correctamente.", tipo="error")
             return False
 
-    async def get_local_or_llm_response(self, prompt: str) -> tuple[str, bool]:
+    async def get_local_or_llm_response(self, prompt: str) -> tuple[str, bool, dict]: # Retorna también la acción HA
+        """
+        Intenta obtener una respuesta de la memoria local primero.
+        Si no la encuentra, usa el LLM de Gemini para generar una respuesta de texto
+        o un comando de Home Assistant.
+        Retorna la respuesta de texto, un booleano indicando si es un candidato para nuevo conocimiento,
+        y un diccionario de comando HA (o None).
+        """
         normalized_prompt = normalize_text(prompt)
         
         for entry in self.memoria:
             if normalized_prompt == entry["pregunta"]:
                 self.log_mensaje(f"Respuesta encontrada en memoria local para: '{prompt}'", tipo="info")
-                return entry["respuesta"], False
+                return entry["respuesta"], False, None # No es nuevo conocimiento, no hay comando HA
 
         self.log_mensaje(f"No se encontró respuesta en memoria local para: '{prompt}'. Consultando LLM...", tipo="info")
 
-        llm_response = await self.llm_service.generate_text(prompt)
-        return llm_response, True
+        # Prompt para el LLM para decidir si es un comando HA o una respuesta de texto
+        llm_prompt = f"""
+        Eres un asistente de hogar inteligente. Tu objetivo es responder a las preguntas del usuario o generar comandos para Home Assistant si el usuario lo solicita.
+        Debes responder en español.
+
+        Si la solicitud del usuario es un comando para controlar un dispositivo (como encender/apagar luces, cambiar el estado de un interruptor, etc.),
+        genera una respuesta JSON que siga el esquema 'HA_COMMAND_SCHEMA'.
+        Ejemplos de comandos:
+        - "enciende la luz de la sala" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.sala_de_estar", "payload": {{}}}}}}
+        - "apaga la luz de la cocina" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_off", "entity_id": "light.cocina", "payload": {{}}}}}}
+        - "cambia el brillo de la luz del dormitorio a 50%" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.dormitorio", "payload": {{"brightness_pct": 50}}}}}}
+        - "enciende el ventilador del salón" -> {{"action_type": "ha_command", "command": {{"domain": "fan", "service": "turn_on", "entity_id": "fan.salon", "payload": {{}}}}}}
+        - "activa la alarma" -> {{"action_type": "ha_command", "command": {{"domain": "alarm_control_panel", "service": "alarm_arm_home", "entity_id": "alarm_control_panel.home_alarm", "payload": {{}}}}}}
+        - "abre la puerta del garaje" -> {{"action_type": "ha_command", "command": {{"domain": "cover", "service": "open_cover", "entity_id": "cover.garage_door", "payload": {{}}}}}}
+        - "pon la temperatura del termostato a 22 grados" -> {{"action_type": "ha_command", "command": {{"domain": "climate", "service": "set_temperature", "entity_id": "climate.termostato", "payload": {{"temperature": 22}}}}}}
+
+
+        Si la solicitud del usuario es una pregunta general o una conversación que no implica un comando de dispositivo,
+        genera una respuesta JSON que siga el esquema 'HA_COMMAND_SCHEMA' con "action_type": "text_response" y proporciona una respuesta de texto adecuada.
+        Ejemplos de preguntas generales:
+        - "qué hora es" -> {{"action_type": "text_response", "response_text": "La hora actual es..."}}
+        - "dime un chiste" -> {{"action_type": "text_response", "response_text": "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!"}}
+        - "hola" -> {{"action_type": "text_response", "response_text": "¡Hola! ¿En qué puedo ayudarte hoy?"}}
+
+        Asegúrate de que la entidad_id sea lo más específica posible (ej. 'light.sala_de_estar' en lugar de solo 'sala_de_estar').
+        Si no puedes determinar un comando HA claro, siempre opta por "text_response".
+
+        Solicitud del usuario: "{prompt}"
+        """
+
+        structured_response = await self.llm_service.generate_structured_response(llm_prompt, HA_COMMAND_SCHEMA)
+
+        if structured_response and structured_response.get("action_type") == "ha_command":
+            command = structured_response.get("command")
+            if command:
+                # Retornar una respuesta de texto confirmando la acción y el comando HA
+                confirmation_text = f"Entendido. Intentando ejecutar el comando de Home Assistant: {command.get('service')} en {command.get('entity_id')}."
+                return confirmation_text, True, command # Es un candidato a nuevo conocimiento, y hay un comando HA
+            else:
+                # Si action_type es ha_command pero falta el comando, tratar como error
+                return "Hubo un error al interpretar el comando para Home Assistant.", True, None
+        elif structured_response and structured_response.get("action_type") == "text_response":
+            response_text = structured_response.get("response_text", "No pude generar una respuesta de texto.")
+            return response_text, True, None # Es un candidato a nuevo conocimiento, no hay comando HA
+        else:
+            # Fallback si la respuesta estructurada no es válida
+            logging.error(f"Respuesta estructurada de LLM inválida o faltante: {structured_response}")
+            return "Lo siento, no pude entender tu solicitud. ¿Podrías reformularla?", True, None
+
 
     async def train_with_feedback(self, prompt: str, response: str, embedding: list, save_memory: bool = True):
         normalized_prompt = normalize_text(prompt)

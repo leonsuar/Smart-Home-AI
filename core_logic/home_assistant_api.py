@@ -1,6 +1,6 @@
 import json
 import logging
-from core_logic.mqtt_client import MQTTClient # ¡Asegúrate de que esta importación sea correcta!
+from core_logic.mqtt_client import MQTTClient
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -10,18 +10,26 @@ class HomeAssistantAPI:
         self.base_topic = base_topic
         logging.info(f"HomeAssistantAPI inicializada con tópico base: {self.base_topic}")
 
-    def publish_command(self, domain: str, service: str, entity_id: str, payload: dict = None):
+    def send_ha_command(self, domain: str, service: str, entity_id: str, payload: dict = None):
         """
-        Publica un comando a Home Assistant.
-        Ejemplo: domain='light', service='turn_on', entity_id='light.living_room'
+        Envía un comando de servicio a Home Assistant a través de MQTT.
+        :param domain: El dominio del servicio (ej. 'light', 'switch').
+        :param service: El servicio a llamar (ej. 'turn_on', 'turn_off').
+        :param entity_id: El ID de la entidad (ej. 'light.sala_de_estar').
+        :param payload: Un diccionario con datos adicionales para el servicio (opcional).
         """
         topic = f"{self.base_topic}/services/{domain}/{service}"
-        message = {"entity_id": entity_id}
+        message_payload = {"entity_id": entity_id}
         if payload:
-            message.update(payload)
+            message_payload.update(payload)
         
-        self.mqtt_client.publish(topic, json.dumps(message))
-        logging.info(f"Comando HA publicado: Tópico='{topic}', Payload='{message}'")
+        try:
+            self.mqtt_client.publish(topic, json.dumps(message_payload))
+            logging.info(f"Comando HA publicado: Tópico='{topic}', Payload='{message_payload}'")
+            return True, f"Comando '{service}' para '{entity_id}' enviado."
+        except Exception as e:
+            logging.error(f"Error al publicar comando HA '{domain}.{service}' para '{entity_id}': {e}")
+            return False, f"Error al enviar comando HA: {e}"
 
     def get_state(self, entity_id: str):
         """
@@ -29,11 +37,7 @@ class HomeAssistantAPI:
         Nota: Esto es una simplificación. En una integración real,
         necesitarías un mecanismo para recibir y procesar la respuesta del estado.
         """
-        # Home Assistant no tiene un tópico directo para "pedir estado" de esta manera
-        # Lo que se hace es suscribirse a los tópicos de estado y esperar actualizaciones.
-        # Para fines de este simulador, si necesitas un estado "simulado", puedes implementarlo aquí.
         logging.warning(f"Solicitud de estado para {entity_id} - En una integración real, se esperaría una actualización de estado.")
-        # Podrías devolver un estado mock o None, o implementar un mecanismo de callback.
         return None
 
     def subscribe_to_state_changes(self, entity_id: str, domain: str = None):
@@ -43,8 +47,7 @@ class HomeAssistantAPI:
         if domain:
             topic = f"{self.base_topic}/{domain}/{entity_id}/state"
         else:
-            # Si el dominio no se especifica, se asume un tópico genérico para la entidad
-            topic = f"{self.base_topic}/#/{entity_id}/state" # Esto podría ser demasiado amplio
+            topic = f"{self.base_topic}/#/{entity_id}/state" 
         self.mqtt_client.subscribe(topic)
         logging.info(f"Suscrito a cambios de estado de HA para '{entity_id}' en tópico: '{topic}'")
 

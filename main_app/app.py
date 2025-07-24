@@ -11,12 +11,12 @@ from core_logic.neuron_network import RedNeuronal
 from core_logic.utils import normalize_text
 from core_logic.mqtt_client import MQTTClient
 from core_logic.home_assistant_api import HomeAssistantAPI
+from core_logic.llm_service import HA_COMMAND_SCHEMA
 
 app = Flask(__name__)
 
 CONFIG_FILE_PATH = './knowledge/config.json'
 
-# Variables globales para la configuración, inicializadas con valores por defecto
 current_config = {
     "mqtt_broker_address": "localhost",
     "mqtt_broker_port": 1883,
@@ -33,18 +33,12 @@ red_neuronal_global = None
 pending_saves = {}
 
 def load_configuration():
-    """
-    Carga la configuración desde el archivo JSON persistente.
-    Si el archivo no existe o está vacío/corrupto, usa las variables de entorno
-    y los valores por defecto. Los valores del archivo tienen prioridad.
-    """
     global current_config
     
     if not os.path.exists('./knowledge'):
         os.makedirs('./knowledge')
         logging.info("Directorio './knowledge' creado para configuración.")
 
-    # Primero, intentar cargar desde el archivo de configuración
     config_from_file = {}
     if os.path.exists(CONFIG_FILE_PATH) and os.path.getsize(CONFIG_FILE_PATH) > 0:
         try:
@@ -53,22 +47,18 @@ def load_configuration():
                 logging.info(f"Configuración cargada desde '{CONFIG_FILE_PATH}'.")
         except json.JSONDecodeError as e:
             logging.error(f"Error al decodificar JSON de configuración '{CONFIG_FILE_PATH}': {e}. Se ignorará el archivo corrupto.")
-            os.rename(CONFIG_FILE_PATH, CONFIG_FILE_PATH + ".bak") # Renombrar archivo corrupto
+            os.rename(CONFIG_FILE_PATH, CONFIG_FILE_PATH + ".bak")
     else:
         logging.info(f"No se encontró '{CONFIG_FILE_PATH}' o está vacío. Se usarán valores por defecto y variables de entorno.")
 
-    # Actualizar current_config con valores por defecto (si no están en el archivo)
     current_config.update(config_from_file)
 
-    # Luego, aplicar variables de entorno como valores por defecto si no están ya definidos
-    # Esto significa que las variables de entorno solo se usarán si NO hay un valor
-    # en el archivo de configuración o si el archivo no existe.
     current_config["mqtt_broker_address"] = os.getenv("MQTT_BROKER_ADDRESS", current_config.get("mqtt_broker_address", "localhost"))
     current_config["mqtt_broker_port"] = int(os.getenv("MQTT_BROKER_PORT", current_config.get("mqtt_broker_port", 1883)))
     current_config["mqtt_username"] = os.getenv("MQTT_USERNAME", current_config.get("mqtt_username", "homeassistant_mqtt_user"))
     current_config["mqtt_password"] = os.getenv("MQTT_PASSWORD", current_config.get("mqtt_password", "homeassistant_mqtt_password"))
     current_config["ml_server_ip"] = os.getenv("ML_SERVER_INTERNAL_IP", current_config.get("ml_server_ip", "127.0.0.1"))
-    current_config["gemini_api_key"] = os.getenv("GEMINI_API_KEY", current_config.get("gemini_api_key", "")) # Gemini API Key siempre de ENV
+    current_config["gemini_api_key"] = os.getenv("GEMINI_API_KEY", current_config.get("gemini_api_key", ""))
 
     logging.info(f"Configuración final: {current_config}")
 
@@ -77,7 +67,6 @@ def save_configuration():
     """Guarda la configuración actual en el archivo JSON persistente."""
     if not os.path.exists('./knowledge'):
         os.makedirs('./knowledge')
-    # No guardar la clave de Gemini en el archivo por seguridad
     config_to_save = {k: v for k, v in current_config.items() if k != "gemini_api_key"}
     with open(CONFIG_FILE_PATH, 'w') as f:
         json.dump(config_to_save, f, indent=4)
@@ -87,7 +76,7 @@ def save_configuration():
 async def initialize_system_async():
     global mqtt_client_global, home_assistant_api_global, red_neuronal_global
     
-    load_configuration() # Cargar la configuración al inicio
+    load_configuration()
 
     logging.info("Esperando 10 segundos para asegurar que ML Server se inicie completamente...")
     await asyncio.sleep(10)
@@ -128,15 +117,13 @@ def guardar_configuracion():
     data = request.json
 
     try:
-        # Actualizar la configuración global con los datos recibidos
-        # Los valores del formulario tienen prioridad sobre los actuales
         current_config["mqtt_broker_address"] = data.get("mqtt_broker_address", current_config["mqtt_broker_address"])
         current_config["mqtt_broker_port"] = int(data.get("mqtt_broker_port", current_config["mqtt_broker_port"]))
         current_config["mqtt_username"] = data.get("mqtt_username", current_config["mqtt_username"])
         current_config["mqtt_password"] = data.get("mqtt_password", current_config["mqtt_password"])
         current_config["ml_server_ip"] = data.get("ml_server_ip", current_config["ml_server_ip"])
         
-        save_configuration() # Guardar la configuración actualizada en el archivo
+        save_configuration()
 
         logging.info("Configuración actualizada y guardada exitosamente.")
         return jsonify({"status": "success", "message": "Configuración guardada exitosamente. Reinicia el contenedor para aplicar los cambios."}), 200
@@ -170,12 +157,43 @@ async def enviar_comando():
 
     response_text = ""
     should_offer_to_save = False
+    ha_command_to_execute = None
 
-    llm_response_text, is_new_knowledge_candidate = await red_neuronal_global.get_local_or_llm_response(comando)
+    llm_response_text, is_new_knowledge_candidate, ha_command = await red_neuronal_global.get_local_or_llm_response(comando)
+    
     response_text = llm_response_text
     should_offer_to_save = is_new_knowledge_candidate
+    ha_command_to_execute = ha_command
 
-    red_neuronal_global.log_mensaje(f"IA: {response_text}", tipo="info")
+    if ha_command_to_execute:
+        domain = ha_command_to_execute.get("domain")
+        service = ha_command_to_execute.get("service")
+        entity_id = ha_command_to_execute.get("entity_id")
+        
+        # Parsear el payload si existe y es una cadena JSON
+        payload_str = ha_command_to_execute.get("payload", "{}") # Asegurarse de que sea una cadena, por defecto un objeto vacío
+        parsed_payload = {}
+        if isinstance(payload_str, str): # Solo intentar parsear si es una cadena
+            try:
+                parsed_payload = json.loads(payload_str)
+            except json.JSONDecodeError as e:
+                red_neuronal_global.log_mensaje(f"HA Error: No se pudo parsear el payload JSON: {e}", tipo="error")
+                parsed_payload = {} # Usar un payload vacío si hay error de parseo
+        elif isinstance(payload_str, dict): # Si por alguna razón ya es un dict (ej. de memoria local)
+            parsed_payload = payload_str
+
+
+        if domain and service and entity_id:
+            success, ha_message = home_assistant_api_global.send_ha_command(domain, service, entity_id, parsed_payload) # Usar parsed_payload
+            if success:
+                red_neuronal_global.log_mensaje(f"HA: {ha_message}", tipo="info")
+            else:
+                red_neuronal_global.log_mensaje(f"HA Error: {ha_message}", tipo="error")
+        else:
+            red_neuronal_global.log_mensaje("HA Error: Comando HA incompleto recibido de la IA.", tipo="error")
+
+
+    red_neuronal_global.log_mensaje(f"IA: {response_text}", tipo="ia")
 
     if should_offer_to_save:
         pending_saves[session_id] = {
@@ -231,7 +249,7 @@ def handle_ha_event(topic, payload):
         red_neuronal_global.log_mensaje(f"Temperatura en sala: {payload}°C", tipo="info")
 
 if __name__ == '__main__':
-    load_configuration() # Cargar la configuración al inicio de la aplicación Flask
+    load_configuration()
     
     if not os.path.exists('./knowledge'):
         os.makedirs('./knowledge')
