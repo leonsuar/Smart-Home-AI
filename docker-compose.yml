@@ -1,41 +1,50 @@
 version: '3.8'
 
 services:
-  # Servicio para la aplicación Flask principal
   main_app:
     build:
-      context: . # El contexto es el directorio raíz del proyecto (Smart-Home-AI/)
-      dockerfile: ./main_app/Dockerfile_app # Ruta del Dockerfile desde el contexto
-    ports:
-      - "5000:5000"
+      context: .
+      dockerfile: ./main_app/Dockerfile_app
+    # Con network_mode: host, los puertos ya no se mapean así.
+    # El contenedor usa directamente los puertos del host.
+    # ports:
+    #   - "5000:5000"
     volumes:
-      # Montamos los subdirectorios necesarios en /app/ (el WORKDIR en Dockerfile_app)
       - ./main_app:/app/main_app
       - ./knowledge:/app/knowledge
       - ./core_logic:/app/core_logic
     environment:
       - FLASK_ENV=development
-      - MQTT_BROKER_ADDRESS=192.168.1.11 # ¡ACTUALIZADO!
-      - MQTT_BROKER_PORT=1883 # ¡ACTUALIZADO!
-      - MQTT_USERNAME=leo # ¡ACTUALIZADO!
-      - MQTT_PASSWORD=Kolke.2576 # ¡ACTUALIZADO!
-      - GEMINI_API_KEY=your_gemini_api_key # ¡REEMPLAZA ESTO con tu clave de API de Gemini!
+      - MQTT_BROKER_ADDRESS=192.168.1.11
+      - MQTT_BROKER_PORT=1883
+      - MQTT_USERNAME=leo
+      - MQTT_PASSWORD=Kolke.2576
+      - GEMINI_API_KEY=AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU
+      # Cuando usas network_mode: host, los servicios se comunican a través de localhost
+      - ML_SERVER_INTERNAL_IP=127.0.0.1 # ¡CAMBIO CLAVE! Ahora es localhost
+    network_mode: host # ¡CAMBIO CLAVE!
     depends_on:
       - ml_server
 
-  # Servicio para el servidor de modelo de Machine Learning (solo embeddings)
   ml_server:
     build:
-      context: ./ml_server # El contexto es el directorio ml_server
+      context: ./ml_server
       dockerfile: Dockerfile_ml
-    ports:
-      - "5001:5001"
+    # Con network_mode: host, los puertos ya no se mapean así.
+    # El contenedor usa directamente los puertos del host.
+    # ports:
+    #   - "5001:5001"
     volumes:
-      - ./ml_server:/app_code # Monta el código de la aplicación en /app_code
+      - ./ml_server:/app_code
     environment:
       - FLASK_ENV=development
+    network_mode: host # ¡CAMBIO CLAVE!
     dns:
       - 8.8.8.8
 
-volumes:
-  pytorch_models_data:
+# Eliminamos la sección networks si usamos network_mode: host
+# networks:
+#   smart_home_network:
+#     ipam:
+#       config:
+#         - subnet: 172.20.0.0/24

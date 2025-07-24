@@ -3,186 +3,385 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Home AI</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Red Neuronal Interactiva</title>
     <style>
+        /* Estilos generales del cuerpo */
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #1a202c; /* bg-gray-900 */
-            color: #e2e8f0; /* text-gray-200 */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
-        .chat-container {
-            height: calc(100vh - 4rem); /* Ajusta la altura para dejar espacio para el input */
-            overflow-y: auto;
-            scroll-behavior: smooth;
+
+        /* Contenedor principal de la aplicación */
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 900px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
         }
-        .message-bubble {
-            max-width: 80%;
-            border-radius: 0.75rem; /* rounded-xl */
-            padding: 0.5rem 1rem;
-            margin-bottom: 0.5rem;
+
+        /* Título de la aplicación */
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        /* Estilos de la consola de chat */
+        #consola {
+            background-color: #1e1e1e;
+            color: #0f0;
+            border: 1px solid #000;
+            height: 400px; /* Altura fija */
+            overflow-y: scroll; /* Habilitar scroll vertical */
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            white-space: pre-wrap;
             word-wrap: break-word;
         }
-        .user-message {
-            background-color: #4c51bf; /* bg-indigo-700 */
-            align-self: flex-end;
+
+        /* Estilos para los tipos de mensajes en la consola */
+        .mensaje {
+            margin-bottom: 5px;
         }
-        .ai-message {
-            background-color: #2d3748; /* bg-gray-700 */
-            align-self: flex-start;
+        .mensaje.info { color: #0f0; }
+        .mensaje.error { color: #f00; }
+        .mensaje.warning { color: #ff0; }
+        .mensaje.comando { color: #0ff; }
+        .mensaje.ia { color: #fff; } /* Mensajes de la IA */
+        .mensaje.confirmacion { color: #add8e6; } /* Azul claro para mensajes de confirmación */
+
+
+        /* Área de entrada de comandos */
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
         }
-        .info-message {
-            background-color: #2a4365; /* bg-blue-800 */
-            font-style: italic;
+
+        #comandoInput {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        /* Estilos del botón de enviar */
+        button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button:hover {
+            background-color: #0056b3;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button:active {
+            background-color: #004085;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        /* Sección de estado de la red */
+        .estado-red {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9e9e9;
+            border-radius: 8px;
+        }
+        .estado-red h2 {
+            margin-top: 0;
+            color: #0056b3;
+        }
+        .estado-red pre {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 0.85em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* Estilos para el área de confirmación */
+        #confirmacionGuardado {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #e0f7fa; /* Un azul muy claro */
+            border: 1px solid #b2ebf2;
+            border-radius: 8px;
             text-align: center;
+            display: none; /* Oculto por defecto */
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
         }
-        .warning-message {
-            background-color: #975a16; /* bg-orange-700 */
-            font-style: italic;
-            text-align: center;
-            color: #fff;
+
+        #confirmacionGuardado p {
+            margin: 0;
+            color: #00796b; /* Verde oscuro para el texto */
+            font-weight: bold;
         }
-        .error-message {
-            background-color: #c53030; /* bg-red-700 */
-            font-style: italic;
-            text-align: center;
-            color: #fff;
+
+        #confirmacionGuardado .button-group button {
+            margin: 0 5px;
+            padding: 8px 15px;
+            font-size: 0.9em;
         }
-        .neuron-card {
-            background-color: #2d3748; /* bg-gray-700 */
-            border-radius: 0.75rem;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem; /* text-sm */
+        #confirmacionGuardado .button-group button.yes {
+            background-color: #28a745; /* Verde para Sí */
+        }
+        #confirmacionGuardado .button-group button.yes:hover {
+            background-color: #218838;
+        }
+        #confirmacionGuardado .button-group button.no {
+            background-color: #dc3545; /* Rojo para No */
+        }
+        #confirmacionGuardado .button-group button.no:hover {
+            background-color: #c82333;
+        }
+
+
+        /* Media queries para responsividad en pantallas más pequeñas */
+        @media (max-width: 600px) {
+            .input-area {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+            }
+            #confirmacionGuardado .button-group {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+            }
+            #confirmacionGuardado .button-group button {
+                margin: 5px 0;
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="flex-grow flex flex-col md:flex-row p-4 space-y-4 md:space-y-0 md:space-x-4">
-        <!-- Columna de Chat -->
-        <div class="flex flex-col w-full md:w-2/3 bg-gray-800 rounded-lg shadow-lg p-4">
-            <div id="chat-log" class="chat-container flex flex-col flex-grow p-2 mb-4 bg-gray-700 rounded-lg">
-                <!-- Los mensajes del chat se insertarán aquí -->
-            </div>
-            <div class="flex space-x-2">
-                <input type="text" id="command-input" class="flex-grow p-3 rounded-lg bg-gray-700 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Escribe tu comando o pregunta...">
-                <button id="send-button" class="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">Enviar</button>
-            </div>
+    <div class="container">
+        <h1>Simulador de Red Neuronal Elemental</h1>
+        <div id="consola"></div>
+        <div class="input-area">
+            <input type="text" id="comandoInput" placeholder="Introduce un comando (ej: ayuda)">
+            <button onclick="enviarComando()">Enviar</button>
         </div>
-
-        <!-- Columna de Estado de la Red -->
-        <div class="flex flex-col w-full md:w-1/3 bg-gray-800 rounded-lg shadow-lg p-4">
-            <h2 class="text-xl font-semibold mb-4 text-center">Estado de la Red Neuronal</h2>
-            <div id="network-state-log" class="flex-grow overflow-y-auto p-2 bg-gray-700 rounded-lg">
-                <!-- El estado de la red se insertará aquí -->
-                <p class="text-center text-gray-400">Cargando estado de la red...</p>
+        <div id="confirmacionGuardado">
+            <p>¿Quieres guardar esta respuesta en la memoria de la IA?</p>
+            <div class="button-group">
+                <button class="yes" onclick="confirmSave('yes')">Sí</button>
+                <button class="no" onclick="confirmSave('no')">No</button>
             </div>
         </div>
     </div>
+    <div class="container estado-red">
+        <h2>Estado Actual de la Red</h2>
+        <pre id="estadoRed"></pre>
+    </div>
 
     <script>
-        const chatLog = document.getElementById('chat-log');
-        const commandInput = document.getElementById('command-input');
-        const sendButton = document.getElementById('send-button');
-        const networkStateLog = document.getElementById('network-state-log');
+        const FLASK_SERVER_URL = `http://${window.location.hostname}:5000`; 
 
-        function addMessage(message, type = 'ai') {
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message-bubble');
+        const consola = document.getElementById('consola');
+        const comandoInput = document.getElementById('comandoInput');
+        const estadoRedElement = document.getElementById('estadoRed');
+        const confirmacionGuardado = document.getElementById('confirmacionGuardado');
 
-            let typeClass = 'ai-message';
-            if (type === 'user') {
-                typeClass = 'user-message';
-            } else if (type === 'info') {
-                typeClass = 'info-message';
-            } else if (type === 'warning') {
-                typeClass = 'warning-message';
-            } else if (type === 'error') {
-                typeClass = 'error-message';
-            }
+        async function enviarComando() {
+            const comando = comandoInput.value;
+            if (!comando) return;
 
-            messageElement.classList.add(typeClass);
-            messageElement.textContent = `[${message.tiempo}] ${message.mensaje}`;
-            chatLog.appendChild(messageElement);
-            chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll to bottom
-        }
+            console.log(`DEBUG (Frontend): Enviando comando: '${comando}'`);
 
-        function updateNetworkState(state) {
-            networkStateLog.innerHTML = ''; // Clear previous state
-            if (state && state.length > 0) {
-                state.forEach(neuron => {
-                    const neuronCard = document.createElement('div');
-                    neuronCard.classList.add('neuron-card');
-                    neuronCard.innerHTML = `
-                        <p class="font-bold text-indigo-300">ID: ${neuron.id}</p>
-                        <p>Peso: ${neuron.peso}</p>
-                        <p>Conexiones: ${neuron.conexiones.length > 0 ? neuron.conexiones.join(', ') : 'Ninguna'}</p>
-                    `;
-                    networkStateLog.appendChild(neuronCard);
+            comandoInput.value = ''; 
+            confirmacionGuardado.style.display = 'none'; 
+
+            try {
+                const response = await fetch(FLASK_SERVER_URL + '/enviar_comando', { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ comando: comando })
                 });
-            } else {
-                networkStateLog.innerHTML = '<p class="text-center text-gray-400">No hay neuronas activas.</p>';
+                const contentType = response.headers.get("content-type");
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`ERROR (Frontend): HTTP Error ${response.status} al enviar comando:`, errorText);
+                    mostrarMensaje(`Error del servidor (${response.status}) al enviar comando.`, 'error');
+                    return;
+                }
+
+                if (contentType && contentType.includes("application/json")) {
+                    const data = await response.json();
+                    console.log('DEBUG (Frontend): Respuesta del servidor (JSON):', data);
+
+                    actualizarConsola(data.log);
+                    actualizarEstadoRed(data.estado_red || []);
+
+                    if (data.should_offer_to_save) {
+                        mostrarMensaje("La IA ha generado una nueva respuesta.", 'confirmacion');
+                        confirmacionGuardado.style.display = 'flex'; 
+                    }
+                } else {
+                    const textResponse = await response.text();
+                    console.error('ERROR (Frontend): Se esperaba JSON para /enviar_comando, pero se recibió:', textResponse);
+                    mostrarMensaje('Error: Formato de respuesta inesperado del servidor para el comando. ¿El servidor está devolviendo HTML?', 'error');
+                }
+            } catch (error) {
+                mostrarMensaje('Error al enviar comando: ' + error, 'error');
+                console.error('ERROR (Frontend): Error en fetch al enviar comando:', error);
             }
         }
 
-        async function sendCommand() {
-            const command = commandInput.value.trim();
-            if (command) {
-                // addMessage({ tiempo: new Date().toLocaleTimeString(), mensaje: command }, 'user'); // Added by server now
-                commandInput.value = ''; // Clear input immediately
-                try {
-                    const response = await fetch('/enviar_comando', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ comando: command })
-                    });
+        async function confirmSave(choice) {
+            confirmacionGuardado.style.display = 'none'; 
+
+            try {
+                const response = await fetch(FLASK_SERVER_URL + '/confirm_save', { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ choice: choice })
+                });
+                const contentType = response.headers.get("content-type");
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`ERROR (Frontend): HTTP Error ${response.status} al confirmar guardado:`, errorText);
+                    mostrarMensaje(`Error del servidor (${response.status}) al confirmar guardado.`, 'error');
+                    return;
+                }
+
+                if (contentType && contentType.includes("application/json")) {
                     const data = await response.json();
-                    if (data.log) {
-                        data.log.forEach(msg => addMessage(msg, msg.tipo));
+                    console.log('DEBUG (Frontend): Respuesta de confirmación (JSON):', data);
+                    mostrarMensaje(data.message, 'info'); 
+                    actualizarConsola(data.log); 
+                    actualizarEstadoRed(data.estado_red || []);
+                } else {
+                    const textResponse = await response.text();
+                    console.error('ERROR (Frontend): Se esperaba JSON para /confirm_save, pero se recibió:', textResponse);
+                    mostrarMensaje('Error: Formato de respuesta inesperado del servidor para la confirmación.', 'error');
+                }
+            } catch (error) {
+                mostrarMensaje('Error al confirmar guardado: ' + error, 'error');
+                console.error('ERROR (Frontend): Error en fetch al confirmar guardado:', error);
+            }
+        }
+
+        function actualizarConsola(mensajes) {
+            consola.innerHTML = '';
+            mensajes.forEach(msg => {
+                const p = document.createElement('p');
+                p.classList.add('mensaje', msg.tipo);
+                p.textContent = `[${msg.tiempo}] ${msg.mensaje}`;
+                consola.appendChild(p);
+            });
+            consola.scrollTop = consola.scrollHeight;
+        }
+
+        function actualizarEstadoRed(estado_red) {
+            let estadoTexto = '';
+            if (estado_red.length === 0) {
+                estadoTexto = "No hay neuronas en la red.";
+            } else {
+                estado_red.forEach(n => {
+                    // Asegurarse de que solo se muestren propiedades relevantes para el estado
+                    if (n.tipo === "Sistema") {
+                        estadoTexto += `Tipo: ${n.tipo}, RAM: ${n["RAM Disponible (MB)"]}MB, CPU: ${n["Núcleos CPU"]}, Disco: ${n["Uso Disco (%)"]}%\n`;
+                    } else {
+                        estadoTexto += `ID: ${n.id}, Pregunta: '${n.pregunta}', Respuesta: '${n.respuesta_corta}', Embedding Len: ${n.embedding_len}\n`;
                     }
-                    if (data.estado_red) {
-                        updateNetworkState(data.estado_red);
-                    }
-                } catch (error) {
-                    console.error('Error al enviar comando:', error);
-                    addMessage({ tiempo: new Date().toLocaleTimeString(), mensaje: `Error de conexión: ${error.message}` }, 'error');
+                });
+            }
+            estadoRedElement.textContent = estadoTexto;
+        }
+
+        function mostrarMensaje(mensaje, tipo) {
+            const p = document.createElement('p');
+            p.classList.add('mensaje', tipo);
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${mensaje}`;
+            consola.appendChild(p);
+            consola.scrollTop = consola.scrollHeight;
+        }
+
+        async function obtenerActualizacionesPeriodicas() {
+            try {
+                const response = await fetch(FLASK_SERVER_URL + '/obtener_log'); 
+                // No mostrar error si el servidor está temporalmente no disponible (ej. reinicio de Flask)
+                if (response.status === 503) { 
+                    console.warn('WARN (Frontend): Servidor temporalmente no disponible (503). Reintentando...');
+                    return; 
+                }
+
+                const contentType = response.headers.get("content-type");
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`ERROR (Frontend): HTTP Error ${response.status} al obtener log:`, errorText);
+                    mostrarMensaje(`Error del servidor (${response.status}) al obtener log.`, 'error');
+                    return;
+                }
+
+                if (contentType && contentType.includes("application/json")) {
+                    const data = await response.json();
+                    actualizarConsola(data.log);
+                    actualizarEstadoRed(data.estado_red);
+                } else {
+                    const textResponse = await response.text();
+                    console.error('ERROR (Frontend): Se esperaba JSON para /obtener_log, pero se recibió:', textResponse);
+                    mostrarMensaje('Error: Formato de respuesta inesperado del servidor para el log. ¿El servidor está devolviendo HTML?', 'error');
+                }
+            } catch (error) {
+                // Solo mostrar un error general de red si no es un problema de 503
+                if (!(error instanceof TypeError && error.message === 'Failed to fetch')) { // Evitar errores de red comunes durante reinicios
+                    console.error('ERROR (Frontend): Error en fetch al obtener log:', error);
+                    mostrarMensaje('Error de red o procesamiento en el cliente al obtener log.', 'error');
+                } else {
+                    console.warn('WARN (Frontend): Error de red temporal al obtener log. Reintentando...');
                 }
             }
         }
 
-        sendButton.addEventListener('click', sendCommand);
-        commandInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendCommand();
+        comandoInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                enviarComando();
             }
         });
 
-        // Función para obtener el log y el estado de la red periódicamente
-        async function fetchLogAndState() {
-            try {
-                const response = await fetch('/obtener_log');
-                const data = await response.json();
-                if (data.log) {
-                    // Limpiar el log actual y añadir todos los mensajes nuevos
-                    chatLog.innerHTML = ''; 
-                    data.log.forEach(msg => addMessage(msg, msg.tipo));
-                }
-                if (data.estado_red) {
-                    updateNetworkState(data.estado_red);
-                }
-            } catch (error) {
-                console.error('Error al obtener log y estado de la red:', error);
-                // No añadir un mensaje de error persistente en el chat por cada fallo de fetch
-            }
-        }
-
-        // Obtener el log y el estado de la red al cargar la página
-        fetchLogAndState();
-        // Actualizar cada 2 segundos
-        setInterval(fetchLogAndState, 2000);
+        document.addEventListener('DOMContentLoaded', () => {
+            obtenerActualizacionesPeriodicas();
+            setInterval(obtenerActualizacionesPeriodicas, 2000);
+        });
     </script>
 </body>
 </html>
