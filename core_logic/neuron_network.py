@@ -3,7 +3,7 @@ import os
 import time
 import httpx
 import logging
-import asyncio # Importar asyncio para sleep
+import asyncio 
 
 # Importaciones de módulos locales
 from core_logic.utils import get_available_ram_mb, get_cpu_core_count, get_disk_usage_percentage, normalize_text
@@ -13,13 +13,12 @@ from core_logic.llm_service import LLMService
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class RedNeuronal:
-    def __init__(self, home_assistant_api: HomeAssistantAPI):
+    def __init__(self, home_assistant_api: HomeAssistantAPI, ml_server_ip: str, gemini_api_key: str): # ¡NUEVOS PARÁMETROS!
         self.memoria = self._cargar_memoria()
         self.mensajes = [] 
         self.home_assistant_api = home_assistant_api
-        self.llm_service = LLMService()
-        # Obtener la IP del ML Server de la variable de entorno
-        self.ml_server_url = f"http://{os.getenv('ML_SERVER_INTERNAL_IP', 'ml_server')}:5001/get_embedding" # ¡CAMBIO CLAVE AQUÍ!
+        self.llm_service = LLMService(api_key=gemini_api_key) # Pasar la clave de Gemini al LLMService
+        self.ml_server_url = f"http://{ml_server_ip}:5001/get_embedding" # Usar la IP del ML Server
         self.initial_knowledge_loaded = False 
 
     def _cargar_memoria(self):
@@ -137,7 +136,7 @@ class RedNeuronal:
 
     async def _check_ml_server_connection(self):
         test_text = "test"
-        embedding = await self.get_embedding_from_pytorch(test_text, retries=5, delay=3) # Aumentar reintentos y retardo
+        embedding = await self.get_embedding_from_pytorch(test_text, retries=5, delay=3)
         if embedding:
             self.log_mensaje("Conexión con ML Server establecida.", tipo="info")
             return True

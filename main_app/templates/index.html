@@ -3,15 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Neuronal Interactiva</title>
+    <title>Asistente de Hogar Inteligente con IA</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
     <style>
         /* Estilos generales del cuerpo */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', sans-serif; /* Usar Inter como fuente */
             margin: 0;
             padding: 20px;
-            background-color: #f4f4f4;
-            color: #333;
+            background-color: #1a202c; /* Fondo oscuro */
+            color: #e2e8f0; /* Texto claro */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -21,32 +34,58 @@
 
         /* Contenedor principal de la aplicación */
         .container {
-            background-color: #fff;
+            background-color: #2d3748; /* Fondo más oscuro para el contenedor */
             padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 1rem; /* Bordes más redondeados */
+            box-shadow: 0 10px 15px rgba(0,0,0,0.25); /* Sombra más pronunciada */
             width: 90%;
             max-width: 900px;
             margin-bottom: 20px;
             box-sizing: border-box;
+            position: relative;
         }
 
         /* Título de la aplicación */
         h1 {
-            color: #0056b3;
+            color: #63b3ed; /* Azul claro para el título */
             text-align: center;
             margin-bottom: 25px;
+            font-size: 2.5rem; /* Título más grande */
+            font-weight: bold;
+        }
+
+        /* Estilos del botón de configuración */
+        .config-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            padding: 8px 15px;
+            background-color: #4a5568; /* Gris oscuro */
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .config-button:hover {
+            background-color: #2d3748;
+        }
+        .config-button:active {
+            background-color: #1a202c;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
         }
 
         /* Estilos de la consola de chat */
         #consola {
-            background-color: #1e1e1e;
-            color: #0f0;
-            border: 1px solid #000;
-            height: 400px; /* Altura fija */
-            overflow-y: scroll; /* Habilitar scroll vertical */
+            background-color: #1a202c; /* Fondo de consola muy oscuro */
+            color: #e2e8f0; /* Color de texto por defecto para consola */
+            border: 1px solid #4a5568; /* Borde más sutil */
+            height: 400px;
+            overflow-y: scroll;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 0.5rem;
             margin-bottom: 20px;
             font-family: 'Courier New', Courier, monospace;
             font-size: 0.9em;
@@ -55,16 +94,16 @@
             word-wrap: break-word;
         }
 
-        /* Estilos para los tipos de mensajes en la consola */
+        /* Estilos para los tipos de mensajes en la consola (colores adaptados al tema oscuro) */
         .mensaje {
             margin-bottom: 5px;
         }
-        .mensaje.info { color: #0f0; }
-        .mensaje.error { color: #f00; }
-        .mensaje.warning { color: #ff0; }
-        .mensaje.comando { color: #0ff; }
-        .mensaje.ia { color: #fff; } /* Mensajes de la IA */
-        .mensaje.confirmacion { color: #add8e6; } /* Azul claro para mensajes de confirmación */
+        .mensaje.info { color: #48bb78; } /* Verde para INFO */
+        .mensaje.error { color: #fc8181; } /* Rojo claro para ERROR */
+        .mensaje.warning { color: #f6e05e; } /* Amarillo para WARNING */
+        .mensaje.comando { color: #63b3ed; } /* Azul claro para COMANDO */
+        .mensaje.ia { color: #cbd5e0; } /* Gris claro para mensajes de la IA */
+        .mensaje.confirmacion { color: #90cdf4; } /* Azul suave para confirmación */
 
 
         /* Área de entrada de comandos */
@@ -77,71 +116,76 @@
         #comandoInput {
             flex-grow: 1;
             padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            border: 1px solid #4a5568; /* Borde oscuro */
+            background-color: #2d3748; /* Fondo oscuro */
+            color: #e2e8f0; /* Texto claro */
+            border-radius: 0.5rem;
             font-size: 1em;
         }
 
         /* Estilos del botón de enviar */
         button {
             padding: 12px 20px;
-            background-color: #007bff;
+            background-color: #4299e1; /* Azul vibrante */
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 0.5rem;
             cursor: pointer;
             font-size: 1em;
             transition: background-color 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         button:hover {
-            background-color: #0056b3;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background-color: #3182ce;
+            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
         }
         button:active {
-            background-color: #004085;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+            background-color: #2b6cb0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
         }
 
         /* Sección de estado de la red */
         .estado-red {
             margin-top: 20px;
             padding: 15px;
-            background-color: #e9e9e9;
-            border-radius: 8px;
+            background-color: #2d3748; /* Fondo oscuro */
+            border-radius: 1rem;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .estado-red h2 {
             margin-top: 0;
-            color: #0056b3;
+            color: #63b3ed; /* Azul claro */
         }
         .estado-red pre {
-            background-color: #f8f8f8;
-            border: 1px solid #ddd;
+            background-color: #1a202c; /* Fondo muy oscuro */
+            border: 1px solid #4a5568;
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 0.5rem;
             overflow-x: auto;
             font-size: 0.85em;
             white-space: pre-wrap;
             word-wrap: break-word;
+            color: #e2e8f0; /* Texto claro */
         }
 
         /* Estilos para el área de confirmación */
         #confirmacionGuardado {
             margin-top: 15px;
             padding: 15px;
-            background-color: #e0f7fa; /* Un azul muy claro */
-            border: 1px solid #b2ebf2;
-            border-radius: 8px;
+            background-color: #2a4365; /* Azul oscuro suave */
+            border: 1px solid #4299e1;
+            border-radius: 0.5rem;
             text-align: center;
-            display: none; /* Oculto por defecto */
+            display: none;
             flex-direction: column;
             gap: 10px;
             align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
         #confirmacionGuardado p {
             margin: 0;
-            color: #00796b; /* Verde oscuro para el texto */
+            color: #a0aec0; /* Gris claro para el texto */
             font-weight: bold;
         }
 
@@ -151,16 +195,16 @@
             font-size: 0.9em;
         }
         #confirmacionGuardado .button-group button.yes {
-            background-color: #28a745; /* Verde para Sí */
+            background-color: #48bb78; /* Verde */
         }
         #confirmacionGuardado .button-group button.yes:hover {
-            background-color: #218838;
+            background-color: #38a169;
         }
         #confirmacionGuardado .button-group button.no {
-            background-color: #dc3545; /* Rojo para No */
+            background-color: #e53e3e; /* Rojo */
         }
         #confirmacionGuardado .button-group button.no:hover {
-            background-color: #c82333;
+            background-color: #c53030;
         }
 
 
@@ -171,6 +215,11 @@
             }
             button {
                 width: 100%;
+            }
+            .config-button {
+                position: static;
+                width: 100%;
+                margin-bottom: 15px;
             }
             #confirmacionGuardado .button-group {
                 display: flex;
@@ -186,7 +235,8 @@
 </head>
 <body>
     <div class="container">
-        <h1>Simulador de Red Neuronal Elemental</h1>
+        <h1>Asistente de Hogar Inteligente con IA</h1> <!-- ¡NUEVO TÍTULO! -->
+        <button class="config-button" onclick="location.href='/config'">Configuración</button>
         <div id="consola"></div>
         <div class="input-area">
             <input type="text" id="comandoInput" placeholder="Introduce un comando (ej: ayuda)">
@@ -315,7 +365,6 @@
                 estadoTexto = "No hay neuronas en la red.";
             } else {
                 estado_red.forEach(n => {
-                    // Asegurarse de que solo se muestren propiedades relevantes para el estado
                     if (n.tipo === "Sistema") {
                         estadoTexto += `Tipo: ${n.tipo}, RAM: ${n["RAM Disponible (MB)"]}MB, CPU: ${n["Núcleos CPU"]}, Disco: ${n["Uso Disco (%)"]}%\n`;
                     } else {
@@ -337,7 +386,6 @@
         async function obtenerActualizacionesPeriodicas() {
             try {
                 const response = await fetch(FLASK_SERVER_URL + '/obtener_log'); 
-                // No mostrar error si el servidor está temporalmente no disponible (ej. reinicio de Flask)
                 if (response.status === 503) { 
                     console.warn('WARN (Frontend): Servidor temporalmente no disponible (503). Reintentando...');
                     return; 
@@ -362,8 +410,7 @@
                     mostrarMensaje('Error: Formato de respuesta inesperado del servidor para el log. ¿El servidor está devolviendo HTML?', 'error');
                 }
             } catch (error) {
-                // Solo mostrar un error general de red si no es un problema de 503
-                if (!(error instanceof TypeError && error.message === 'Failed to fetch')) { // Evitar errores de red comunes durante reinicios
+                if (!(error instanceof TypeError && error.message === 'Failed to fetch')) {
                     console.error('ERROR (Frontend): Error en fetch al obtener log:', error);
                     mostrarMensaje('Error de red o procesamiento en el cliente al obtener log.', 'error');
                 } else {

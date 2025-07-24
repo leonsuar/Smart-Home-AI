@@ -3,6 +3,7 @@ import asyncio
 import os
 import time
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -13,11 +14,17 @@ from core_logic.home_assistant_api import HomeAssistantAPI
 
 app = Flask(__name__)
 
-MQTT_BROKER_ADDRESS = os.getenv("MQTT_BROKER_ADDRESS", "localhost")
-MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME", "homeassistant_mqtt_user")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "homeassistant_mqtt_password")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+CONFIG_FILE_PATH = './knowledge/config.json'
+
+# Variables globales para la configuración, inicializadas con valores por defecto
+current_config = {
+    "mqtt_broker_address": "localhost",
+    "mqtt_broker_port": 1883,
+    "mqtt_username": "homeassistant_mqtt_user",
+    "mqtt_password": "homeassistant_mqtt_password",
+    "ml_server_ip": "127.0.0.1",
+    "gemini_api_key": ""
+}
 
 mqtt_client_global = None
 home_assistant_api_global = None
@@ -25,21 +32,72 @@ red_neuronal_global = None
 
 pending_saves = {}
 
+def load_configuration():
+    """
+    Carga la configuración desde el archivo JSON persistente.
+    Si el archivo no existe o está vacío/corrupto, usa las variables de entorno
+    y los valores por defecto. Los valores del archivo tienen prioridad.
+    """
+    global current_config
+    
+    if not os.path.exists('./knowledge'):
+        os.makedirs('./knowledge')
+        logging.info("Directorio './knowledge' creado para configuración.")
+
+    # Primero, intentar cargar desde el archivo de configuración
+    config_from_file = {}
+    if os.path.exists(CONFIG_FILE_PATH) and os.path.getsize(CONFIG_FILE_PATH) > 0:
+        try:
+            with open(CONFIG_FILE_PATH, 'r') as f:
+                config_from_file = json.load(f)
+                logging.info(f"Configuración cargada desde '{CONFIG_FILE_PATH}'.")
+        except json.JSONDecodeError as e:
+            logging.error(f"Error al decodificar JSON de configuración '{CONFIG_FILE_PATH}': {e}. Se ignorará el archivo corrupto.")
+            os.rename(CONFIG_FILE_PATH, CONFIG_FILE_PATH + ".bak") # Renombrar archivo corrupto
+    else:
+        logging.info(f"No se encontró '{CONFIG_FILE_PATH}' o está vacío. Se usarán valores por defecto y variables de entorno.")
+
+    # Actualizar current_config con valores por defecto (si no están en el archivo)
+    current_config.update(config_from_file)
+
+    # Luego, aplicar variables de entorno como valores por defecto si no están ya definidos
+    # Esto significa que las variables de entorno solo se usarán si NO hay un valor
+    # en el archivo de configuración o si el archivo no existe.
+    current_config["mqtt_broker_address"] = os.getenv("MQTT_BROKER_ADDRESS", current_config.get("mqtt_broker_address", "localhost"))
+    current_config["mqtt_broker_port"] = int(os.getenv("MQTT_BROKER_PORT", current_config.get("mqtt_broker_port", 1883)))
+    current_config["mqtt_username"] = os.getenv("MQTT_USERNAME", current_config.get("mqtt_username", "homeassistant_mqtt_user"))
+    current_config["mqtt_password"] = os.getenv("MQTT_PASSWORD", current_config.get("mqtt_password", "homeassistant_mqtt_password"))
+    current_config["ml_server_ip"] = os.getenv("ML_SERVER_INTERNAL_IP", current_config.get("ml_server_ip", "127.0.0.1"))
+    current_config["gemini_api_key"] = os.getenv("GEMINI_API_KEY", current_config.get("gemini_api_key", "")) # Gemini API Key siempre de ENV
+
+    logging.info(f"Configuración final: {current_config}")
+
+
+def save_configuration():
+    """Guarda la configuración actual en el archivo JSON persistente."""
+    if not os.path.exists('./knowledge'):
+        os.makedirs('./knowledge')
+    # No guardar la clave de Gemini en el archivo por seguridad
+    config_to_save = {k: v for k, v in current_config.items() if k != "gemini_api_key"}
+    with open(CONFIG_FILE_PATH, 'w') as f:
+        json.dump(config_to_save, f, indent=4)
+    logging.info(f"Configuración guardada en '{CONFIG_FILE_PATH}'.")
+
+
 async def initialize_system_async():
-    """
-    Inicializa el cliente MQTT, la API de Home Assistant y la red neuronal.
-    """
     global mqtt_client_global, home_assistant_api_global, red_neuronal_global
     
-    logging.info("Esperando 10 segundos para asegurar que ML Server se inicie completamente...") # ¡NUEVO!
-    await asyncio.sleep(10) # ¡NUEVO! Retardo inicial
+    load_configuration() # Cargar la configuración al inicio
+
+    logging.info("Esperando 10 segundos para asegurar que ML Server se inicie completamente...")
+    await asyncio.sleep(10)
 
     logging.info("Initializing MQTT client...")
     mqtt_client_global = MQTTClient(
-        broker_address=MQTT_BROKER_ADDRESS,
-        port=MQTT_BROKER_PORT,
-        username=MQTT_USERNAME,
-        password=MQTT_PASSWORD
+        broker_address=current_config["mqtt_broker_address"],
+        port=current_config["mqtt_broker_port"],
+        username=current_config["mqtt_username"],
+        password=current_config["mqtt_password"]
     )
     mqtt_client_global.connect()
 
@@ -47,7 +105,11 @@ async def initialize_system_async():
     home_assistant_api_global = HomeAssistantAPI(mqtt_client_global)
 
     logging.info("Initializing Neuron Network...")
-    red_neuronal_global = RedNeuronal(home_assistant_api=home_assistant_api_global)
+    red_neuronal_global = RedNeuronal(
+        home_assistant_api=home_assistant_api_global,
+        ml_server_ip=current_config["ml_server_ip"],
+        gemini_api_key=current_config["gemini_api_key"]
+    )
     await red_neuronal_global.initialize_network_automatically()
     logging.info("System initialization complete.")
 
@@ -55,6 +117,36 @@ async def initialize_system_async():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/config')
+def config():
+    return render_template('config.html', config=current_config)
+
+@app.route('/guardar_configuracion', methods=['POST'])
+def guardar_configuracion():
+    global current_config
+    data = request.json
+
+    try:
+        # Actualizar la configuración global con los datos recibidos
+        # Los valores del formulario tienen prioridad sobre los actuales
+        current_config["mqtt_broker_address"] = data.get("mqtt_broker_address", current_config["mqtt_broker_address"])
+        current_config["mqtt_broker_port"] = int(data.get("mqtt_broker_port", current_config["mqtt_broker_port"]))
+        current_config["mqtt_username"] = data.get("mqtt_username", current_config["mqtt_username"])
+        current_config["mqtt_password"] = data.get("mqtt_password", current_config["mqtt_password"])
+        current_config["ml_server_ip"] = data.get("ml_server_ip", current_config["ml_server_ip"])
+        
+        save_configuration() # Guardar la configuración actualizada en el archivo
+
+        logging.info("Configuración actualizada y guardada exitosamente.")
+        return jsonify({"status": "success", "message": "Configuración guardada exitosamente. Reinicia el contenedor para aplicar los cambios."}), 200
+    except ValueError as e:
+        logging.error(f"Error de validación al guardar configuración: {e}")
+        return jsonify({"status": "error", "message": f"Error de validación: {e}"}), 400
+    except Exception as e:
+        logging.error(f"Error al guardar configuración: {e}")
+        return jsonify({"status": "error", "message": f"Error interno al guardar la configuración: {e}"}), 500
+
 
 @app.route('/obtener_log')
 async def obtener_log():
@@ -139,6 +231,8 @@ def handle_ha_event(topic, payload):
         red_neuronal_global.log_mensaje(f"Temperatura en sala: {payload}°C", tipo="info")
 
 if __name__ == '__main__':
+    load_configuration() # Cargar la configuración al inicio de la aplicación Flask
+    
     if not os.path.exists('./knowledge'):
         os.makedirs('./knowledge')
     

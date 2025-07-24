@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración - Asistente de Hogar Inteligente con IA</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Fondo oscuro */
+            color: #e2e8f0; /* Texto claro */
+        }
+        /* Custom styles for rounded corners on elements */
+        .rounded-lg { border-radius: 0.5rem; }
+        .rounded-xl { border-radius: 0.75rem; }
+        .rounded-2xl { border-radius: 1rem; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-md"> <!-- Fondo más oscuro para el contenedor -->
+        <h1 class="text-3xl font-bold text-center text-blue-400 mb-8">Configuración del Asistente IA</h1> <!-- ¡NUEVO TÍTULO! -->
+
+        <form id="configForm" class="space-y-6">
+            <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-600 pb-2">Configuración MQTT</h2>
+            <div>
+                <label for="mqtt_broker_address" class="block text-sm font-medium text-gray-300 mb-1">Dirección del Broker MQTT:</label>
+                <input type="text" id="mqtt_broker_address" name="mqtt_broker_address" 
+                       value="{{ config.mqtt_broker_address }}"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-700 text-gray-100">
+            </div>
+            <div>
+                <label for="mqtt_broker_port" class="block text-sm font-medium text-gray-300 mb-1">Puerto del Broker MQTT:</label>
+                <input type="number" id="mqtt_broker_port" name="mqtt_broker_port" 
+                       value="{{ config.mqtt_broker_port }}"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-700 text-gray-100">
+            </div>
+            <div>
+                <label for="mqtt_username" class="block text-sm font-medium text-gray-300 mb-1">Usuario MQTT:</label>
+                <input type="text" id="mqtt_username" name="mqtt_username" 
+                       value="{{ config.mqtt_username }}"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-700 text-gray-100">
+            </div>
+            <div>
+                <label for="mqtt_password" class="block text-sm font-medium text-gray-300 mb-1">Contraseña MQTT:</label>
+                <input type="password" id="mqtt_password" name="mqtt_password" 
+                       value="{{ config.mqtt_password }}"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-700 text-gray-100">
+            </div>
+
+            <h2 class="text-xl font-semibold text-gray-200 mb-4 border-b border-gray-600 pb-2 pt-6">Configuración de Servicios</h2>
+            <div>
+                <label for="ml_server_ip" class="block text-sm font-medium text-gray-300 mb-1">IP del Servidor ML:</label>
+                <input type="text" id="ml_server_ip" name="ml_server_ip" 
+                       value="{{ config.ml_server_ip }}"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-700 text-gray-100">
+            </div>
+            <!-- Aquí se añadirán más campos de configuración en el futuro, como Home Assistant -->
+
+            <div class="flex justify-center mt-8">
+                <button type="submit" 
+                        class="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                    Guardar Configuración
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-6 text-center">
+            <a href="/" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Volver a la Consola</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('configForm').addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevenir el envío por defecto del formulario
+
+            const formData = new FormData(event.target);
+            const configData = Object.fromEntries(formData.entries());
+
+            // Convertir el puerto a número
+            configData.mqtt_broker_port = parseInt(configData.mqtt_broker_port);
+
+            try {
+                const response = await fetch('/guardar_configuracion', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(configData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert('Éxito: ' + result.message);
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error al enviar la configuración:', error);
+                alert('Error de red al intentar guardar la configuración.');
+            }
+        });
+    </script>
+</body>
+</html>

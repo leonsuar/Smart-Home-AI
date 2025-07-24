@@ -1,0 +1,7 @@
+{
+    "mqtt_broker_address": "192.168.1.11",
+    "mqtt_broker_port": 1883,
+    "mqtt_username": "leo",
+    "mqtt_password": "Kolke.2576",
+    "ml_server_ip": "127.0.0.1"
+}

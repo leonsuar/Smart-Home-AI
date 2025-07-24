@@ -15,14 +15,14 @@ services:
       - ./core_logic:/app/core_logic
     environment:
       - FLASK_ENV=development
-      - MQTT_BROKER_ADDRESS=192.168.1.11
-      - MQTT_BROKER_PORT=1883
-      - MQTT_USERNAME=leo
-      - MQTT_PASSWORD=Kolke.2576
-      - GEMINI_API_KEY=AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU
-      # Cuando usas network_mode: host, los servicios se comunican a través de localhost
-      - ML_SERVER_INTERNAL_IP=127.0.0.1 # ¡CAMBIO CLAVE! Ahora es localhost
-    network_mode: host # ¡CAMBIO CLAVE!
+      # ¡ELIMINAR ESTAS LÍNEAS! La configuración ahora viene de config.json
+      # - MQTT_BROKER_ADDRESS=192.168.1.11
+      # - MQTT_BROKER_PORT=1883
+      # - MQTT_USERNAME=leo
+      # - MQTT_PASSWORD=Kolke.2576
+      # - ML_SERVER_INTERNAL_IP=127.0.0.1
+      - GEMINI_API_KEY=AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU # ¡Esta sí se mantiene!
+    network_mode: host
     depends_on:
       - ml_server
 
@@ -30,15 +30,13 @@ services:
     build:
       context: ./ml_server
       dockerfile: Dockerfile_ml
-    # Con network_mode: host, los puertos ya no se mapean así.
-    # El contenedor usa directamente los puertos del host.
     # ports:
     #   - "5001:5001"
     volumes:
       - ./ml_server:/app_code
     environment:
       - FLASK_ENV=development
-    network_mode: host # ¡CAMBIO CLAVE!
+    network_mode: host
     dns:
       - 8.8.8.8
 
