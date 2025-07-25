@@ -4,431 +4,297 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Asistente de Hogar Inteligente con IA</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                }
-            }
-        }
-    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Estilos generales del cuerpo */
         body {
-            font-family: 'Inter', sans-serif; /* Usar Inter como fuente */
-            margin: 0;
-            padding: 20px;
-            background-color: #1a202c; /* Fondo oscuro */
-            color: #e2e8f0; /* Texto claro */
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* bg-gray-900 */
+            color: #e2e8f0; /* text-gray-200 */
         }
-
-        /* Contenedor principal de la aplicación */
-        .container {
-            background-color: #2d3748; /* Fondo más oscuro para el contenedor */
-            padding: 25px;
-            border-radius: 1rem; /* Bordes más redondeados */
-            box-shadow: 0 10px 15px rgba(0,0,0,0.25); /* Sombra más pronunciada */
-            width: 90%;
-            max-width: 900px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
-            position: relative;
+        .log-entry {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            border-radius: 8px;
+            word-wrap: break-word; /* Asegura que el texto largo se ajuste */
         }
+        .log-entry.info { background-color: #2d3748; /* gray-800 */ }
+        .log-entry.comando { background-color: #4a5568; /* gray-700 */ }
+        .log-entry.ia { background-color: #4299e1; /* blue-500 */ }
+        .log-entry.error { background-color: #e53e3e; /* red-600 */ }
+        .log-entry.warning { background-color: #dd6b20; /* orange-600 */ }
 
-        /* Título de la aplicación */
-        h1 {
-            color: #63b3ed; /* Azul claro para el título */
-            text-align: center;
-            margin-bottom: 25px;
-            font-size: 2.5rem; /* Título más grande */
-            font-weight: bold;
-        }
-
-        /* Estilos del botón de configuración */
-        .config-button {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            padding: 8px 15px;
-            background-color: #4a5568; /* Gris oscuro */
-            color: white;
-            border: none;
-            border-radius: 0.5rem;
+        /* Estilos para el toggle */
+        .toggle-button {
             cursor: pointer;
-            font-size: 0.9em;
-            transition: background-color 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        .config-button:hover {
+            user-select: none;
+            padding: 8px 12px;
             background-color: #2d3748;
-        }
-        .config-button:active {
-            background-color: #1a202c;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-        }
-
-        /* Estilos de la consola de chat */
-        #consola {
-            background-color: #1a202c; /* Fondo de consola muy oscuro */
-            color: #e2e8f0; /* Color de texto por defecto para consola */
-            border: 1px solid #4a5568; /* Borde más sutil */
-            height: 400px;
-            overflow-y: scroll;
-            padding: 15px;
-            border-radius: 0.5rem;
-            margin-bottom: 20px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.9em;
-            line-height: 1.4;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
-        /* Estilos para los tipos de mensajes en la consola (colores adaptados al tema oscuro) */
-        .mensaje {
-            margin-bottom: 5px;
-        }
-        .mensaje.info { color: #48bb78; } /* Verde para INFO */
-        .mensaje.error { color: #fc8181; } /* Rojo claro para ERROR */
-        .mensaje.warning { color: #f6e05e; } /* Amarillo para WARNING */
-        .mensaje.comando { color: #63b3ed; } /* Azul claro para COMANDO */
-        .mensaje.ia { color: #cbd5e0; } /* Gris claro para mensajes de la IA */
-        .mensaje.confirmacion { color: #90cdf4; } /* Azul suave para confirmación */
-
-
-        /* Área de entrada de comandos */
-        .input-area {
+            border-radius: 8px;
+            margin-bottom: 8px;
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        #comandoInput {
-            flex-grow: 1;
-            padding: 12px;
-            border: 1px solid #4a5568; /* Borde oscuro */
-            background-color: #2d3748; /* Fondo oscuro */
-            color: #e2e8f0; /* Texto claro */
-            border-radius: 0.5rem;
-            font-size: 1em;
-        }
-
-        /* Estilos del botón de enviar */
-        button {
-            padding: 12px 20px;
-            background-color: #4299e1; /* Azul vibrante */
-            color: white;
-            border: none;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            font-size: 1em;
-            transition: background-color 0.2s ease;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        button:hover {
-            background-color: #3182ce;
-            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
-        }
-        button:active {
-            background-color: #2b6cb0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Sección de estado de la red */
-        .estado-red {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #2d3748; /* Fondo oscuro */
-            border-radius: 1rem;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .estado-red h2 {
-            margin-top: 0;
-            color: #63b3ed; /* Azul claro */
-        }
-        .estado-red pre {
-            background-color: #1a202c; /* Fondo muy oscuro */
-            border: 1px solid #4a5568;
-            padding: 10px;
-            border-radius: 0.5rem;
-            overflow-x: auto;
-            font-size: 0.85em;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            color: #e2e8f0; /* Texto claro */
-        }
-
-        /* Estilos para el área de confirmación */
-        #confirmacionGuardado {
-            margin-top: 15px;
-            padding: 15px;
-            background-color: #2a4365; /* Azul oscuro suave */
-            border: 1px solid #4299e1;
-            border-radius: 0.5rem;
-            text-align: center;
-            display: none;
-            flex-direction: column;
-            gap: 10px;
+            justify-content: space-between;
             align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .toggle-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .toggle-content.expanded {
+            max-height: 500px; /* Ajusta según el contenido esperado */
+            transition: max-height 0.5s ease-in;
+        }
+        .rotate-icon {
+            transition: transform 0.3s ease;
+        }
+        .rotate-icon.rotated {
+            transform: rotate(90deg);
         }
 
-        #confirmacionGuardado p {
-            margin: 0;
-            color: #a0aec0; /* Gris claro para el texto */
-            font-weight: bold;
+        /* Estilos para las listas de dispositivos */
+        .device-list-item {
+            background-color: #4a5568; /* gray-700 */
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            font-size: 0.875rem; /* text-sm */
+            color: #e2e8f0; /* text-gray-200 */
+            display: block; /* Asegura que cada li ocupe su propia línea */
         }
-
-        #confirmacionGuardado .button-group button {
-            margin: 0 5px;
-            padding: 8px 15px;
-            font-size: 0.9em;
-        }
-        #confirmacionGuardado .button-group button.yes {
-            background-color: #48bb78; /* Verde */
-        }
-        #confirmacionGuardado .button-group button.yes:hover {
-            background-color: #38a169;
-        }
-        #confirmacionGuardado .button-group button.no {
-            background-color: #e53e3e; /* Rojo */
-        }
-        #confirmacionGuardado .button-group button.no:hover {
-            background-color: #c53030;
-        }
-
-
-        /* Media queries para responsividad en pantallas más pequeñas */
-        @media (max-width: 600px) {
-            .input-area {
-                flex-direction: column;
-            }
-            button {
-                width: 100%;
-            }
-            .config-button {
-                position: static;
-                width: 100%;
-                margin-bottom: 15px;
-            }
-            #confirmacionGuardado .button-group {
-                display: flex;
-                flex-direction: column;
-                width: 100%;
-            }
-            #confirmacionGuardado .button-group button {
-                margin: 5px 0;
-                width: 100%;
-            }
+        .device-list-item strong {
+            color: #a0aec0; /* gray-400 */
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1>Asistente de Hogar Inteligente con IA</h1> <!-- ¡NUEVO TÍTULO! -->
-        <button class="config-button" onclick="location.href='/config'">Configuración</button>
-        <div id="consola"></div>
-        <div class="input-area">
-            <input type="text" id="comandoInput" placeholder="Introduce un comando (ej: ayuda)">
-            <button onclick="enviarComando()">Enviar</button>
-        </div>
-        <div id="confirmacionGuardado">
-            <p>¿Quieres guardar esta respuesta en la memoria de la IA?</p>
-            <div class="button-group">
-                <button class="yes" onclick="confirmSave('yes')">Sí</button>
-                <button class="no" onclick="confirmSave('no')">No</button>
+<body class="flex flex-col h-screen">
+    <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-100">Asistente de Hogar Inteligente con IA</h1>
+        <a href="/config" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">Configuración</a>
+    </header>
+
+    <main class="flex-grow flex p-4 overflow-hidden">
+        <div class="flex-1 bg-gray-800 rounded-lg shadow-lg p-4 flex flex-col mr-4">
+            <h2 class="text-xl font-semibold mb-4 text-gray-100">Log de la IA</h2>
+            <div id="log-display" class="flex-grow overflow-y-auto bg-gray-900 p-3 rounded-md">
+                <!-- Los mensajes del log se insertarán aquí -->
+            </div>
+            
+            <!-- Contenedor para el mensaje de guardar/descartar, fijo debajo del log -->
+            <div id="save-confirmation-container" class="mt-4 hidden">
+                <div class="log-entry warning">
+                    ¿Quieres guardar esta respuesta en la memoria de la IA?
+                    <button id="confirm-save-yes" class="bg-green-600 hover:bg-green-700 text-white text-xs py-1 px-2 rounded-md ml-2">Sí</button>
+                    <button id="confirm-save-no" class="bg-red-600 hover:bg-red-700 text-white text-xs py-1 px-2 rounded-md ml-1">No</button>
+                </div>
+            </div>
+
+            <div class="mt-4 flex">
+                <input type="text" id="command-input" placeholder="Introduce un comando (ej: ayuda)"
+                       class="flex-grow p-3 rounded-l-lg bg-gray-700 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600">
+                <button id="send-command-button"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-r-lg shadow-md transition duration-300 ease-in-out">
+                    Enviar
+                </button>
             </div>
         </div>
-    </div>
-    <div class="container estado-red">
-        <h2>Estado Actual de la Red</h2>
-        <pre id="estadoRed"></pre>
-    </div>
+
+        <div class="w-1/3 bg-gray-800 rounded-lg shadow-lg p-4 flex flex-col">
+            <h2 class="text-xl font-semibold mb-4 text-gray-100">Estado de la Red y Dispositivos</h2>
+            <div id="network-state-display" class="flex-grow overflow-y-auto bg-gray-900 p-3 rounded-md">
+                <!-- El estado de la red se insertará aquí -->
+                <div id="system-info-section">
+                    <!-- Información del sistema se insertará aquí -->
+                </div>
+
+                <div id="discovered-entities-section" class="mt-4">
+                    <div class="toggle-button" onclick="toggleSection('discovered-entities-content', 'discovered-entities-icon')">
+                        <span class="text-gray-100 font-medium">Dispositivos Descubiertos por HA</span>
+                        <span id="discovered-entities-icon" class="rotate-icon">&#9658;</span> <!-- Icono de flecha derecha -->
+                    </div>
+                    <div id="discovered-entities-content" class="toggle-content bg-gray-700 p-3 rounded-md mt-2">
+                        <ul id="discovered-entities-list" class="list-none text-sm text-gray-200">
+                            <!-- Los dispositivos descubiertos se cargarán aquí -->
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="tasmota-map-section" class="mt-4">
+                    <div class="toggle-button" onclick="toggleSection('tasmota-map-content', 'tasmota-map-icon')">
+                        <span class="text-gray-100 font-medium">Mapeo de Comandos Tasmota</span>
+                        <span id="tasmota-map-icon" class="rotate-icon">&#9658;</span>
+                    </div>
+                    <div id="tasmota-map-content" class="toggle-content bg-gray-700 p-3 rounded-md mt-2">
+                        <ul id="tasmota-map-list" class="list-none text-sm text-gray-200">
+                            <!-- El mapeo de Tasmota se cargará aquí -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <script>
-        const FLASK_SERVER_URL = `http://${window.location.hostname}:5000`; 
+        const logDisplay = document.getElementById('log-display');
+        const networkStateDisplay = document.getElementById('network-state-display');
+        const systemInfoSection = document.getElementById('system-info-section'); // Nuevo elemento
+        const commandInput = document.getElementById('command-input');
+        const sendCommandButton = document.getElementById('send-command-button');
+        const discoveredEntitiesList = document.getElementById('discovered-entities-list');
+        const tasmotaMapList = document.getElementById('tasmota-map-list');
+        const saveConfirmationContainer = document.getElementById('save-confirmation-container'); // Nuevo contenedor
 
-        const consola = document.getElementById('consola');
-        const comandoInput = document.getElementById('comandoInput');
-        const estadoRedElement = document.getElementById('estadoRed');
-        const confirmacionGuardado = document.getElementById('confirmacionGuardado');
+        let isSavingConfirmed = false;
 
-        async function enviarComando() {
-            const comando = comandoInput.value;
-            if (!comando) return;
+        // Función para alternar la visibilidad de las secciones
+        function toggleSection(contentId, iconId) {
+            const content = document.getElementById(contentId);
+            const icon = document.getElementById(iconId);
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                icon.classList.remove('rotated');
+            } else {
+                content.classList.add('expanded');
+                icon.classList.add('rotated');
+            }
+        }
 
-            console.log(`DEBUG (Frontend): Enviando comando: '${comando}'`);
-
-            comandoInput.value = ''; 
-            confirmacionGuardado.style.display = 'none'; 
-
+        async function fetchLogAndState() {
             try {
-                const response = await fetch(FLASK_SERVER_URL + '/enviar_comando', { 
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ comando: comando })
-                });
-                const contentType = response.headers.get("content-type");
+                const response = await fetch('/obtener_log');
+                const data = await response.json();
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`ERROR (Frontend): HTTP Error ${response.status} al enviar comando:`, errorText);
-                    mostrarMensaje(`Error del servidor (${response.status}) al enviar comando.`, 'error');
-                    return;
+                // Actualizar Log
+                logDisplay.innerHTML = '';
+                data.log.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = `log-entry ${entry.tipo}`;
+                    div.innerHTML = `<strong>[${entry.tiempo}]</strong> ${entry.mensaje}`;
+                    logDisplay.appendChild(div);
+                });
+                logDisplay.scrollTop = logDisplay.scrollHeight; // Auto-scroll al final
+
+                // Actualizar Información del Sistema
+                systemInfoSection.innerHTML = '';
+                data.estado_red.filter(entry => entry.tipo && entry.tipo.startsWith("Sistema")).forEach(entry => {
+                    const p = document.createElement('p');
+                    p.className = 'text-sm text-gray-300';
+                    p.textContent = `${entry.tipo}: ${Object.entries(entry).filter(([key]) => key !== 'tipo').map(([key, value]) => `${key}: ${value}`).join(', ')}`;
+                    systemInfoSection.appendChild(p);
+                });
+
+                // Actualizar Dispositivos Descubiertos por HA
+                discoveredEntitiesList.innerHTML = '';
+                if (data.discovered_entities && Object.keys(data.discovered_entities).length > 0) {
+                    for (const entityId in data.discovered_entities) {
+                        const info = data.discovered_entities[entityId];
+                        const li = document.createElement('li');
+                        li.className = 'device-list-item'; // Clase para estilos de línea
+                        li.innerHTML = `<strong>${info.name || entityId}</strong> (${entityId})<br>
+                                        Dominio: ${info.domain || 'N/A'} | Cmd Tópico: ${info.command_topic || 'N/A'}`;
+                        discoveredEntitiesList.appendChild(li);
+                    }
+                } else {
+                    const li = document.createElement('li');
+                    li.className = 'device-list-item';
+                    li.textContent = 'No se han descubierto dispositivos MQTT.';
+                    discoveredEntitiesList.appendChild(li);
                 }
 
-                if (contentType && contentType.includes("application/json")) {
-                    const data = await response.json();
-                    console.log('DEBUG (Frontend): Respuesta del servidor (JSON):', data);
+                // Actualizar Mapeo de Comandos Tasmota
+                tasmotaMapList.innerHTML = '';
+                if (data.tasmota_map && Object.keys(data.tasmota_map).length > 0) {
+                    for (const entityId in data.tasmota_map) {
+                        const info = data.tasmota_map[entityId];
+                        const li = document.createElement('li');
+                        li.className = 'device-list-item'; // Clase para estilos de línea
+                        li.innerHTML = `<strong>${entityId}</strong><br>
+                                        Prefijo Comando: ${info.command_topic_prefix || 'N/A'} | Sufijo Power: ${info.power_topic_suffix || 'N/A'}`;
+                        tasmotaMapList.appendChild(li);
+                    }
+                } else {
+                    const li = document.createElement('li');
+                    li.className = 'device-list-item';
+                    li.textContent = 'No hay mapeos de comandos Tasmota específicos.';
+                    tasmotaMapList.appendChild(li);
+                }
 
-                    actualizarConsola(data.log);
-                    actualizarEstadoRed(data.estado_red || []);
+            } catch (error) {
+                console.error('Error al obtener log y estado:', error);
+                logDisplay.innerHTML += `<div class="log-entry error"><strong>[ERROR]</strong> Error al conectar con el servidor: ${error.message}</div>`;
+            }
+        }
+
+        async function sendCommand() {
+            const command = commandInput.value.trim();
+            if (command) {
+                isSavingConfirmed = false; // Resetear la bandera de confirmación al enviar un nuevo comando
+                saveConfirmationContainer.classList.add('hidden'); // Ocultar el contenedor de confirmación
+
+                try {
+                    const response = await fetch('/enviar_comando', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ comando: command })
+                    });
+                    const data = await response.json();
+                    
+                    // fetchLogAndState() se llamará automáticamente por el intervalo
+                    commandInput.value = ''; // Limpiar el input
 
                     if (data.should_offer_to_save) {
-                        mostrarMensaje("La IA ha generado una nueva respuesta.", 'confirmacion');
-                        confirmacionGuardado.style.display = 'flex'; 
+                        showSaveConfirmation();
                     }
-                } else {
-                    const textResponse = await response.text();
-                    console.error('ERROR (Frontend): Se esperaba JSON para /enviar_comando, pero se recibió:', textResponse);
-                    mostrarMensaje('Error: Formato de respuesta inesperado del servidor para el comando. ¿El servidor está devolviendo HTML?', 'error');
+
+                } catch (error) {
+                    console.error('Error al enviar comando:', error);
+                    logDisplay.innerHTML += `<div class="log-entry error"><strong>[ERROR]</strong> Error al enviar comando: ${error.message}</div>`;
                 }
-            } catch (error) {
-                mostrarMensaje('Error al enviar comando: ' + error, 'error');
-                console.error('ERROR (Frontend): Error en fetch al enviar comando:', error);
             }
         }
 
-        async function confirmSave(choice) {
-            confirmacionGuardado.style.display = 'none'; 
+        function showSaveConfirmation() {
+            saveConfirmationContainer.classList.remove('hidden'); // Mostrar el contenedor de confirmación
+            // Asegurarse de que los event listeners estén adjuntos
+            document.getElementById('confirm-save-yes').onclick = () => sendSaveChoice('yes');
+            document.getElementById('confirm-save-no').onclick = () => sendSaveChoice('no');
+        }
+
+        async function sendSaveChoice(choice) {
+            if (isSavingConfirmed) return; // Evitar múltiples envíos
+            isSavingConfirmed = true;
+
+            saveConfirmationContainer.classList.add('hidden'); // Ocultar el contenedor de confirmación después de la elección
 
             try {
-                const response = await fetch(FLASK_SERVER_URL + '/confirm_save', { 
+                const response = await fetch('/confirm_save', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ choice: choice })
                 });
-                const contentType = response.headers.get("content-type");
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`ERROR (Frontend): HTTP Error ${response.status} al confirmar guardado:`, errorText);
-                    mostrarMensaje(`Error del servidor (${response.status}) al confirmar guardado.`, 'error');
-                    return;
-                }
-
-                if (contentType && contentType.includes("application/json")) {
-                    const data = await response.json();
-                    console.log('DEBUG (Frontend): Respuesta de confirmación (JSON):', data);
-                    mostrarMensaje(data.message, 'info'); 
-                    actualizarConsola(data.log); 
-                    actualizarEstadoRed(data.estado_red || []);
-                } else {
-                    const textResponse = await response.text();
-                    console.error('ERROR (Frontend): Se esperaba JSON para /confirm_save, pero se recibió:', textResponse);
-                    mostrarMensaje('Error: Formato de respuesta inesperado del servidor para la confirmación.', 'error');
+                const data = await response.json();
+                // fetchLogAndState() se llamará automáticamente por el intervalo
+                if (data.status === 'success') {
+                    // Opcional: mostrar un mensaje de éxito/error en el log
+                    // logDisplay.innerHTML += `<div class="log-entry info">${data.message}</div>`;
                 }
             } catch (error) {
-                mostrarMensaje('Error al confirmar guardado: ' + error, 'error');
-                console.error('ERROR (Frontend): Error en fetch al confirmar guardado:', error);
+                console.error('Error al enviar elección de guardado:', error);
+                logDisplay.innerHTML += `<div class="log-entry error"><strong>[ERROR]</strong> Error al guardar elección: ${error.message}</div>`;
             }
         }
 
-        function actualizarConsola(mensajes) {
-            consola.innerHTML = '';
-            mensajes.forEach(msg => {
-                const p = document.createElement('p');
-                p.classList.add('mensaje', msg.tipo);
-                p.textContent = `[${msg.tiempo}] ${msg.mensaje}`;
-                consola.appendChild(p);
-            });
-            consola.scrollTop = consola.scrollHeight;
-        }
-
-        function actualizarEstadoRed(estado_red) {
-            let estadoTexto = '';
-            if (estado_red.length === 0) {
-                estadoTexto = "No hay neuronas en la red.";
-            } else {
-                estado_red.forEach(n => {
-                    if (n.tipo === "Sistema") {
-                        estadoTexto += `Tipo: ${n.tipo}, RAM: ${n["RAM Disponible (MB)"]}MB, CPU: ${n["Núcleos CPU"]}, Disco: ${n["Uso Disco (%)"]}%\n`;
-                    } else {
-                        estadoTexto += `ID: ${n.id}, Pregunta: '${n.pregunta}', Respuesta: '${n.respuesta_corta}', Embedding Len: ${n.embedding_len}\n`;
-                    }
-                });
-            }
-            estadoRedElement.textContent = estadoTexto;
-        }
-
-        function mostrarMensaje(mensaje, tipo) {
-            const p = document.createElement('p');
-            p.classList.add('mensaje', tipo);
-            p.textContent = `[${new Date().toLocaleTimeString()}] ${mensaje}`;
-            consola.appendChild(p);
-            consola.scrollTop = consola.scrollHeight;
-        }
-
-        async function obtenerActualizacionesPeriodicas() {
-            try {
-                const response = await fetch(FLASK_SERVER_URL + '/obtener_log'); 
-                if (response.status === 503) { 
-                    console.warn('WARN (Frontend): Servidor temporalmente no disponible (503). Reintentando...');
-                    return; 
-                }
-
-                const contentType = response.headers.get("content-type");
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`ERROR (Frontend): HTTP Error ${response.status} al obtener log:`, errorText);
-                    mostrarMensaje(`Error del servidor (${response.status}) al obtener log.`, 'error');
-                    return;
-                }
-
-                if (contentType && contentType.includes("application/json")) {
-                    const data = await response.json();
-                    actualizarConsola(data.log);
-                    actualizarEstadoRed(data.estado_red);
-                } else {
-                    const textResponse = await response.text();
-                    console.error('ERROR (Frontend): Se esperaba JSON para /obtener_log, pero se recibió:', textResponse);
-                    mostrarMensaje('Error: Formato de respuesta inesperado del servidor para el log. ¿El servidor está devolviendo HTML?', 'error');
-                }
-            } catch (error) {
-                if (!(error instanceof TypeError && error.message === 'Failed to fetch')) {
-                    console.error('ERROR (Frontend): Error en fetch al obtener log:', error);
-                    mostrarMensaje('Error de red o procesamiento en el cliente al obtener log.', 'error');
-                } else {
-                    console.warn('WARN (Frontend): Error de red temporal al obtener log. Reintentando...');
-                }
-            }
-        }
-
-        comandoInput.addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
-                enviarComando();
+        // Event Listeners
+        sendCommandButton.addEventListener('click', sendCommand);
+        commandInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendCommand();
             }
         });
 
-        document.addEventListener('DOMContentLoaded', () => {
-            obtenerActualizacionesPeriodicas();
-            setInterval(obtenerActualizacionesPeriodicas, 2000);
-        });
+        // Cargar log y estado al iniciar y cada pocos segundos
+        fetchLogAndState();
+        setInterval(fetchLogAndState, 2000); // Actualizar cada 2 segundos
     </script>
 </body>
 </html>

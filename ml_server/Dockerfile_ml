@@ -1,23 +1,23 @@
-# Usa una imagen base con Python y herramientas de desarrollo basada en Debian Bullseye
+# Dockerfile_ml (ubicado en ~/Smart-Home-AI/ml_server/Dockerfile_ml)
+
 FROM python:3.9-slim-bullseye
 
-# Establece el directorio de trabajo dentro del contenedor.
-WORKDIR /app_code
+WORKDIR /app
 
-# Instala las dependencias básicas necesarias.
+# Instalar dependencias del sistema si es necesario
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    python-is-python3 && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends python-is-python3 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copia los archivos de requisitos e instálalos.
-COPY requirements_ml.txt .
+# Copiar el archivo de requisitos del servidor ML y luego instalar las dependencias de Python.
+COPY ml_server/requirements_ml.txt .
 RUN pip install --no-cache-dir -r requirements_ml.txt
 
-# Copia el código de la aplicación (ml_server.py)
-COPY ml_server.py .
+# Copiar el código de la aplicación del servidor ML
+COPY ml_server/ml_server.py ./ml_server/
 
-# Expone el puerto que usará la aplicación Flask
-EXPOSE 5001
+# Copiar la lógica central (código compartido)
+COPY core_logic/ ./core_logic/
 
-# Comando para ejecutar la aplicación Flask
-CMD ["python", "ml_server.py"]
+# Establecer el punto de entrada para el servidor ML con la ruta completa a python
+CMD ["/usr/local/bin/python", "ml_server/ml_server.py"]

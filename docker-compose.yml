@@ -3,46 +3,38 @@ version: '3.8'
 services:
   main_app:
     build:
-      context: .
-      dockerfile: ./main_app/Dockerfile_app
-    # Con network_mode: host, los puertos ya no se mapean así.
-    # El contenedor usa directamente los puertos del host.
-    # ports:
-    #   - "5000:5000"
+      context: . # Contexto de construcción en la raíz del proyecto
+      dockerfile: main_app/Dockerfile_app # Ruta al Dockerfile relativa al contexto
     volumes:
+      # Montamos los directorios directamente para desarrollo local
       - ./main_app:/app/main_app
       - ./knowledge:/app/knowledge
-      - ./core_logic:/app/core_logic
+      - ./core_logic:/app/core_logic # Montado para main_app
     environment:
       - FLASK_ENV=development
-      # ¡ELIMINAR ESTAS LÍNEAS! La configuración ahora viene de config.json
-      # - MQTT_BROKER_ADDRESS=192.168.1.11
-      # - MQTT_BROKER_PORT=1883
-      # - MQTT_USERNAME=leo
-      # - MQTT_PASSWORD=Kolke.2576
-      # - ML_SERVER_INTERNAL_IP=127.0.0.1
-      - GEMINI_API_KEY=AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU # ¡Esta sí se mantiene!
-    network_mode: host
+      - PYTHONPATH=/app # ¡Añadido para que Python encuentre core_logic!
+      - GEMINI_API_KEY=AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU
+      # Las variables MQTT/ML_SERVER se leen de config.json en tu código,
+      # por lo que no se necesitan aquí si el network_mode es host.
+    network_mode: host # El contenedor usa directamente los puertos del host
     depends_on:
       - ml_server
+    dns: # Configuración DNS para NTP y resolución de nombres
+      - 192.168.1.10 # Tu servidor NTP/DNS local
+      - 8.8.8.8      # DNS de respaldo (Google DNS)
 
   ml_server:
     build:
-      context: ./ml_server
-      dockerfile: Dockerfile_ml
-    # ports:
-    #   - "5001:5001"
+      context: . # ¡También el contexto de construcción es la raíz del proyecto!
+      dockerfile: ml_server/Dockerfile_ml # Ruta al Dockerfile relativa al nuevo contexto
     volumes:
-      - ./ml_server:/app_code
+      # Montamos los directorios directamente para desarrollo local
+      - ./ml_server:/app/ml_server # Cambiado el destino a /app/ml_server para consistencia
+      - ./core_logic:/app/core_logic # ¡Montado para ml_server también!
     environment:
       - FLASK_ENV=development
+      - PYTHONPATH=/app # ¡Añadido para que Python encuentre core_logic!
     network_mode: host
-    dns:
-      - 8.8.8.8
-
-# Eliminamos la sección networks si usamos network_mode: host
-# networks:
-#   smart_home_network:
-#     ipam:
-#       config:
-#         - subnet: 172.20.0.0/24
+    dns: # Configuración DNS para NTP y resolución de nombres
+      - 192.168.1.10 # Tu servidor NTP/DNS local
+      - 8.8.8.8      # DNS de respaldo (Google DNS)

@@ -1,35 +1,27 @@
-# Usa una imagen base oficial de Python basada en Debian Bullseye
+# Dockerfile_app (ubicado en ~/Smart-Home-AI/main_app/Dockerfile_app)
+
 FROM python:3.9-slim-bullseye
 
-# Establece el directorio de trabajo en /app dentro del contenedor
 WORKDIR /app
 
-# Instala el paquete python-is-python3 y actualiza pip
+# Instalar dependencias del sistema si es necesario
 RUN apt-get update && \
     apt-get install -y --no-install-recommends python-is-python3 && \
-    rm -rf /var/lib/apt/lists/* && \
-    pip install --upgrade pip
+    rm -rf /var/lib/apt/lists/*
 
-# Copia los archivos de requisitos e instálalos
-COPY main_app/requirements_app.txt ./main_app/requirements_app.txt
-RUN pip install --no-cache-dir -r ./main_app/requirements_app.txt
+# Copiar el archivo de requisitos de la aplicación y luego instalar las dependencias de Python.
+COPY main_app/requirements_app.txt .
+RUN pip install --no-cache-dir -r requirements_app.txt
 
-# Copia los directorios necesarios desde el contexto (raíz del proyecto)
-COPY main_app/ ./main_app/
-COPY core_logic/ ./core_logic/
-COPY knowledge/ ./knowledge/
+# Copiar el código de la aplicación principal, plantillas y archivos estáticos
+COPY main_app/app.py ./main_app/
 COPY main_app/static/ ./main_app/static/
 COPY main_app/templates/ ./main_app/templates/
 
-# Comando de depuración para listar el contenido de core_logic (puedes eliminarlo después de que funcione)
-RUN echo "Contenido de /app/core_logic durante la construcción:"
-RUN ls -l /app/core_logic
+# Copiar la lógica central (código compartido)
+COPY core_logic/ ./core_logic/
 
-# Expone el puerto en el que se ejecutará la aplicación Flask
-EXPOSE 5000
+# El directorio 'knowledge' se maneja mediante un montaje de volumen en docker-compose.yml.
 
-# Añade el directorio /app a la ruta de búsqueda de Python
-ENV PYTHONPATH=/app
-
-# Define el comando para ejecutar la aplicación
-CMD ["python", "main_app/app.py"]
+# Establecer el punto de entrada para la aplicación principal con la ruta completa a python
+CMD ["/usr/local/bin/python", "main_app/app.py"]

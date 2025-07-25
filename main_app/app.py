@@ -73,6 +73,17 @@ def save_configuration():
     logging.info(f"Configuración guardada en '{CONFIG_FILE_PATH}'.")
 
 
+def handle_mqtt_message_from_ha(topic, payload):
+    """
+    Función para manejar los mensajes MQTT recibidos de Home Assistant.
+    Ahora, pasa el mensaje a HomeAssistantAPI para su procesamiento.
+    """
+    if home_assistant_api_global:
+        home_assistant_api_global.process_mqtt_message(topic, payload)
+    else:
+        logging.warning(f"Mensaje MQTT recibido antes de la inicialización de HomeAssistantAPI: Tópico='{topic}', Payload='{payload[:100]}...'")
+
+
 async def initialize_system_async():
     global mqtt_client_global, home_assistant_api_global, red_neuronal_global
     
@@ -89,9 +100,16 @@ async def initialize_system_async():
         password=current_config["mqtt_password"]
     )
     mqtt_client_global.connect()
-
+    
     logging.info("Initializing Home Assistant API...")
     home_assistant_api_global = HomeAssistantAPI(mqtt_client_global)
+    
+    # ¡Registrar el callback para mensajes MQTT DESPUÉS de inicializar home_assistant_api_global!
+    mqtt_client_global.register_message_callback(handle_mqtt_message_from_ha)
+
+    # ¡Suscribirse a todos los tópicos de Home Assistant al inicio!
+    home_assistant_api_global.subscribe_to_all_ha_topics()
+
 
     logging.info("Initializing Neuron Network...")
     red_neuronal_global = RedNeuronal(
@@ -141,7 +159,9 @@ async def obtener_log():
         return jsonify(log=[{"tiempo": time.strftime("%H:%M:%S"), "mensaje": "El sistema aún se está inicializando. Por favor, espera un momento.", "tipo": "warning"}], estado_red=[]), 503
     return jsonify({
         'log': red_neuronal_global.mensajes,
-        'estado_red': red_neuronal_global.obtener_estado_red()
+        'estado_red': red_neuronal_global.obtener_estado_red(),
+        'discovered_entities': home_assistant_api_global.ha_entity_info if home_assistant_api_global else {}, # Añadir entidades descubiertas
+        'tasmota_map': home_assistant_api_global.tasmota_command_map if home_assistant_api_global else {} # Añadir mapeo Tasmota
     })
 
 @app.route('/enviar_comando', methods=['POST'])
@@ -170,21 +190,20 @@ async def enviar_comando():
         service = ha_command_to_execute.get("service")
         entity_id = ha_command_to_execute.get("entity_id")
         
-        # Parsear el payload si existe y es una cadena JSON
-        payload_str = ha_command_to_execute.get("payload", "{}") # Asegurarse de que sea una cadena, por defecto un objeto vacío
+        payload_str = ha_command_to_execute.get("payload", "{}")
         parsed_payload = {}
-        if isinstance(payload_str, str): # Solo intentar parsear si es una cadena
+        if isinstance(payload_str, str):
             try:
                 parsed_payload = json.loads(payload_str)
             except json.JSONDecodeError as e:
                 red_neuronal_global.log_mensaje(f"HA Error: No se pudo parsear el payload JSON: {e}", tipo="error")
-                parsed_payload = {} # Usar un payload vacío si hay error de parseo
-        elif isinstance(payload_str, dict): # Si por alguna razón ya es un dict (ej. de memoria local)
+                parsed_payload = {}
+        elif isinstance(payload_str, dict):
             parsed_payload = payload_str
 
 
         if domain and service and entity_id:
-            success, ha_message = home_assistant_api_global.send_ha_command(domain, service, entity_id, parsed_payload) # Usar parsed_payload
+            success, ha_message = home_assistant_api_global.send_ha_command(domain, service, entity_id, parsed_payload)
             if success:
                 red_neuronal_global.log_mensaje(f"HA: {ha_message}", tipo="info")
             else:
@@ -205,7 +224,9 @@ async def enviar_comando():
         'log': red_neuronal_global.mensajes,
         'estado_red': red_neuronal_global.obtener_estado_red(),
         'response_text': response_text,
-        'should_offer_to_save': should_offer_to_save
+        'should_offer_to_save': should_offer_to_save,
+        'discovered_entities': home_assistant_api_global.ha_entity_info if home_assistant_api_global else {}, # Añadir entidades descubiertas
+        'tasmota_map': home_assistant_api_global.tasmota_command_map if home_assistant_api_global else {} # Añadir mapeo Tasmota
     })
 
 @app.route('/confirm_save', methods=['POST'])
@@ -239,14 +260,10 @@ async def confirm_save():
         'status': 'success',
         'message': message,
         'log': red_neuronal_global.mensajes,
-        'estado_red': red_neuronal_global.obtener_estado_red()
+        'estado_red': red_neuronal_global.obtener_estado_red(),
+        'discovered_entities': home_assistant_api_global.ha_entity_info if home_assistant_api_global else {}, # Añadir entidades descubiertas
+        'tasmota_map': home_assistant_api_global.tasmota_command_map if home_assistant_api_global else {} # Añadir mapeo Tasmota
     })
-
-def handle_ha_event(topic, payload):
-    if "homeassistant/binary_sensor/motion_garden/state" in topic and payload == "ON":
-        red_neuronal_global.log_mensaje("¡Alerta! Movimiento detectado en el jardín.", tipo="warning")
-    elif "homeassistant/sensor/temperature_living_room/state" in topic:
-        red_neuronal_global.log_mensaje(f"Temperatura en sala: {payload}°C", tipo="info")
 
 if __name__ == '__main__':
     load_configuration()

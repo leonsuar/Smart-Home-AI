@@ -8,7 +8,7 @@ import asyncio
 # Importaciones de módulos locales
 from core_logic.utils import get_available_ram_mb, get_cpu_core_count, get_disk_usage_percentage, normalize_text
 from core_logic.home_assistant_api import HomeAssistantAPI
-from core_logic.llm_service import LLMService, HA_COMMAND_SCHEMA # Importar el esquema
+from core_logic.llm_service import LLMService, HA_COMMAND_SCHEMA
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -16,7 +16,7 @@ class RedNeuronal:
     def __init__(self, home_assistant_api: HomeAssistantAPI, ml_server_ip: str, gemini_api_key: str):
         self.memoria = self._cargar_memoria()
         self.mensajes = [] 
-        self.home_assistant_api = home_assistant_api
+        self.home_assistant_api = home_assistant_api # Referencia a la instancia de HomeAssistantAPI
         self.llm_service = LLMService(api_key=gemini_api_key)
         self.ml_server_url = f"http://{ml_server_ip}:5001/get_embedding"
         self.initial_knowledge_loaded = False 
@@ -83,6 +83,8 @@ class RedNeuronal:
             {"pregunta": "cuánto espacio en disco tengo", "respuesta": f"El uso de disco es del {get_disk_usage_percentage()}%."},
             {"pregunta": "enciende la luz de la sala", "respuesta": "Comando para encender la luz de la sala enviado a Home Assistant."},
             {"pregunta": "apaga la luz de la cocina", "respuesta": "Comando para apagar la luz de la cocina enviado a Home Assistant."},
+            {"pregunta": "enciende la luz de la azotea", "respuesta": "Comando para encender la luz de la azotea enviado a Home Assistant."},
+            {"pregunta": "apaga la luz de la azotea", "respuesta": "Comando para apagar la luz de la azotea enviado a Home Assistant."},
             {"pregunta": "cual es el estado de la luz de la sala", "respuesta": "Consultando el estado de la luz de la sala en Home Assistant."},
             {"pregunta": "pon música", "respuesta": "Reproduciendo tu lista de reproducción favorita."},
             {"pregunta": "dime un chiste", "respuesta": "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!"},
@@ -144,38 +146,72 @@ class RedNeuronal:
             self.log_mensaje("Fallo al conectar con ML Server. La IA puede no funcionar correctamente.", tipo="error")
             return False
 
-    async def get_local_or_llm_response(self, prompt: str) -> tuple[str, bool, dict]: # Retorna también la acción HA
-        """
-        Intenta obtener una respuesta de la memoria local primero.
-        Si no la encuentra, usa el LLM de Gemini para generar una respuesta de texto
-        o un comando de Home Assistant.
-        Retorna la respuesta de texto, un booleano indicando si es un candidato para nuevo conocimiento,
-        y un diccionario de comando HA (o None).
-        """
+    async def get_local_or_llm_response(self, prompt: str) -> tuple[str, bool, dict]:
         normalized_prompt = normalize_text(prompt)
         
+        # El mapeo de nombres comunes a entity_id se puede construir dinámicamente
+        # o mantener un subconjunto para los casos más comunes/manuales.
+        # Por ahora, lo mantenemos para que Gemini tenga ejemplos claros.
+        # HomeAssistantAPI se encargará del mapeo final a tópicos MQTT.
+        entity_id_map = {
+            "luz de la sala": "light.sala_de_estar",
+            "luz de la cocina": "light.cocina",
+            "luz de la azotea": "light.tasmotafondo_tasmota",
+            "luz azotea 1": "light.tasmotafondo_tasmota",
+            "luz azotea": "light.tasmotafondo_tasmota",
+            "ventilador del salón": "fan.salon",
+            "alarma": "alarm_control_panel.home_alarm",
+            "puerta del garaje": "cover.garage_door",
+            "termostato": "climate.termostato"
+        }
+
         for entry in self.memoria:
             if normalized_prompt == entry["pregunta"]:
                 self.log_mensaje(f"Respuesta encontrada en memoria local para: '{prompt}'", tipo="info")
-                return entry["respuesta"], False, None # No es nuevo conocimiento, no hay comando HA
+                return entry["respuesta"], False, None
 
         self.log_mensaje(f"No se encontró respuesta en memoria local para: '{prompt}'. Consultando LLM...", tipo="info")
 
-        # Prompt para el LLM para decidir si es un comando HA o una respuesta de texto
+        empty_payload_json = json.dumps({})
+        brightness_payload_json = json.dumps({"brightness_pct": 50})
+        temperature_payload_json = json.dumps({"temperature": 22})
+
+        # Construir una lista de entidades conocidas para el prompt del LLM
+        # Esto es para que el LLM sepa qué entity_ids puede usar.
+        # Podríamos hacer esto más sofisticado, incluyendo nombres amigables.
+        known_entity_ids = list(self.home_assistant_api.ha_entity_info.keys())
+        known_entity_ids_str = ", ".join(known_entity_ids) if known_entity_ids else "ninguno (no se han descubierto dispositivos)"
+
         llm_prompt = f"""
         Eres un asistente de hogar inteligente. Tu objetivo es responder a las preguntas del usuario o generar comandos para Home Assistant si el usuario lo solicita.
         Debes responder en español.
 
+        Aquí tienes un mapeo de nombres comunes a IDs de entidad de Home Assistant que debes usar:
+        - "luz de la sala": "light.sala_de_estar"
+        - "luz de la cocina": "light.cocina"
+        - "luz de la azotea": "light.tasmotafondo_tasmota"
+        - "luz azotea 1": "light.tasmotafondo_tasmota"
+        - "luz azotea": "light.tasmotafondo_tasmota"
+        - "ventilador del salón": "fan.salon"
+        - "alarma": "alarm_control_panel.home_alarm"
+        - "puerta del garaje": "cover.garage_door"
+        - "termostato": "climate.termostato"
+
+        Dispositivos actualmente conocidos por Home Assistant (por descubrimiento MQTT): {known_entity_ids_str}.
+        Puedes referirte a estos dispositivos por su nombre amigable si lo conoces, o por su entity_id.
+
         Si la solicitud del usuario es un comando para controlar un dispositivo (como encender/apagar luces, cambiar el estado de un interruptor, etc.),
         genera una respuesta JSON que siga el esquema 'HA_COMMAND_SCHEMA'.
+        Asegúrate de usar los `entity_id` del mapeo proporcionado o los `entity_id` de los dispositivos descubiertos.
         Ejemplos de comandos:
-        - "enciende la luz de la sala" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.sala_de_estar", "payload": {{}}}}}}
-        - "apaga la luz de la cocina" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_off", "entity_id": "light.cocina", "payload": {{}}}}}}
-        - "cambia el brillo de la luz del dormitorio a 50%" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.dormitorio", "payload": {{"brightness_pct": 50}}}}}}
-        - "enciende el ventilador del salón" -> {{"action_type": "ha_command", "command": {{"domain": "fan", "service": "turn_on", "entity_id": "fan.salon", "payload": {{}}}}}}
-        - "activa la alarma" -> {{"action_type": "ha_command", "command": {{"domain": "alarm_control_panel", "service": "alarm_arm_home", "entity_id": "alarm_control_panel.home_alarm", "payload": {{}}}}}}
-        - "abre la puerta del garaje" -> {{"action_type": "ha_command", "command": {{"domain": "cover", "service": "open_cover", "entity_id": "cover.garage_door", "payload": {{}}}}}}
-        - "pon la temperatura del termostato a 22 grados" -> {{"action_type": "ha_command", "command": {{"domain": "climate", "service": "set_temperature", "entity_id": "climate.termostato", "payload": {{"temperature": 22}}}}}}
+        - "enciende la luz de la sala" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.sala_de_estar", "payload": "{empty_payload_json}"}}}}
+        - "apaga la luz de la cocina" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_off", "entity_id": "light.cocina", "payload": "{empty_payload_json}"}}}}
+        - "cambia el brillo de la luz del dormitorio a 50%" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.dormitorio", "payload": "{brightness_payload_json}"}}}}
+        - "enciende la luz de la azotea" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_on", "entity_id": "light.tasmotafondo_tasmota", "payload": "{empty_payload_json}"}}}}
+        - "apaga la luz azotea 1" -> {{"action_type": "ha_command", "command": {{"domain": "light", "service": "turn_off", "entity_id": "light.tasmotafondo_tasmota", "payload": "{empty_payload_json}"}}}}
+        - "activa la alarma" -> {{"action_type": "ha_command", "command": {{"domain": "alarm_control_panel", "service": "alarm_arm_home", "entity_id": "alarm_control_panel.home_alarm", "payload": "{empty_payload_json}"}}}}
+        - "abre la puerta del garaje" -> {{"action_type": "ha_command", "command": {{"domain": "cover", "service": "open_cover", "entity_id": "cover.garage_door", "payload": "{empty_payload_json}"}}}}
+        - "pon la temperatura del termostato a 22 grados" -> {{"action_type": "ha_command", "command": {{"domain": "climate", "service": "set_temperature", "entity_id": "climate.termostato", "payload": "{temperature_payload_json}"}}}}
 
 
         Si la solicitud del usuario es una pregunta general o una conversación que no implica un comando de dispositivo,
@@ -185,7 +221,6 @@ class RedNeuronal:
         - "dime un chiste" -> {{"action_type": "text_response", "response_text": "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!"}}
         - "hola" -> {{"action_type": "text_response", "response_text": "¡Hola! ¿En qué puedo ayudarte hoy?"}}
 
-        Asegúrate de que la entidad_id sea lo más específica posible (ej. 'light.sala_de_estar' en lugar de solo 'sala_de_estar').
         Si no puedes determinar un comando HA claro, siempre opta por "text_response".
 
         Solicitud del usuario: "{prompt}"
@@ -196,17 +231,37 @@ class RedNeuronal:
         if structured_response and structured_response.get("action_type") == "ha_command":
             command = structured_response.get("command")
             if command:
-                # Retornar una respuesta de texto confirmando la acción y el comando HA
+                requested_entity_id = command.get("entity_id")
+                
+                # Intentar mapear el entity_id a uno conocido (manual o descubierto)
+                # Primero, intentar el mapeo manual de nombres comunes (ej. "luz de la azotea" -> "light.tasmotafondo_tasmota")
+                mapped_entity_id = entity_id_map.get(normalize_text(requested_entity_id), requested_entity_id)
+                
+                # Luego, verificar si el entity_id (ya sea el original o el mapeado) existe en los dispositivos descubiertos
+                if mapped_entity_id not in self.home_assistant_api.ha_entity_info:
+                    # Si el LLM generó un entity_id que no está en nuestro mapeo manual ni en los descubiertos,
+                    # intentamos ver si el nombre amigable del dispositivo coincide con algo descubierto.
+                    found_by_name = False
+                    for ha_id, info in self.home_assistant_api.ha_entity_info.items():
+                        if normalize_text(info.get("name")) == normalize_text(prompt) or \
+                           normalize_text(info.get("name")) in normalize_text(prompt): # Buscar nombre amigable en el prompt
+                            mapped_entity_id = ha_id
+                            found_by_name = True
+                            break
+                    if not found_by_name:
+                        self.log_mensaje(f"Advertencia: El entity_id '{mapped_entity_id}' no está en los dispositivos descubiertos.", tipo="warning")
+                        return f"Lo siento, no pude encontrar el dispositivo '{requested_entity_id}' en tu hogar inteligente. ¿Está configurado en Home Assistant?", True, None
+                
+                command["entity_id"] = mapped_entity_id # Asegurarse de usar el entity_id mapeado o descubierto
+
                 confirmation_text = f"Entendido. Intentando ejecutar el comando de Home Assistant: {command.get('service')} en {command.get('entity_id')}."
-                return confirmation_text, True, command # Es un candidato a nuevo conocimiento, y hay un comando HA
+                return confirmation_text, True, command
             else:
-                # Si action_type es ha_command pero falta el comando, tratar como error
                 return "Hubo un error al interpretar el comando para Home Assistant.", True, None
         elif structured_response and structured_response.get("action_type") == "text_response":
             response_text = structured_response.get("response_text", "No pude generar una respuesta de texto.")
-            return response_text, True, None # Es un candidato a nuevo conocimiento, no hay comando HA
+            return response_text, True, None
         else:
-            # Fallback si la respuesta estructurada no es válida
             logging.error(f"Respuesta estructurada de LLM inválida o faltante: {structured_response}")
             return "Lo siento, no pude entender tu solicitud. ¿Podrías reformularla?", True, None
 
@@ -246,5 +301,27 @@ class RedNeuronal:
         estado.append({"tipo": "Sistema", "RAM Disponible (MB)": get_available_ram_mb()})
         estado.append({"tipo": "Sistema", "Núcleos CPU": get_cpu_core_count()})
         estado.append({"tipo": "Sistema", "Uso Disco (%)": get_disk_usage_percentage()})
+
+        # Añadir información de dispositivos descubiertos
+        if self.home_assistant_api and self.home_assistant_api.ha_entity_info:
+            for entity_id, info in self.home_assistant_api.ha_entity_info.items():
+                estado.append({
+                    "tipo": "Dispositivo HA",
+                    "entity_id": entity_id,
+                    "nombre": info.get("name", "N/A"),
+                    "dominio": info.get("domain", "N/A"),
+                    "command_topic": info.get("command_topic", "N/A"),
+                    "state_topic": info.get("state_topic", "N/A")
+                })
+        
+        # Añadir información de mapeo Tasmota
+        if self.home_assistant_api and self.home_assistant_api.tasmota_command_map:
+            for entity_id, info in self.home_assistant_api.tasmota_command_map.items():
+                estado.append({
+                    "tipo": "Mapeo Tasmota",
+                    "entity_id": entity_id,
+                    "prefijo_comando": info.get("command_topic_prefix", "N/A"),
+                    "sufijo_power": info.get("power_topic_suffix", "N/A")
+                })
 
         return estado

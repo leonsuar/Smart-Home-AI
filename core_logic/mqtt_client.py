@@ -1,118 +1,97 @@
 import paho.mqtt.client as mqtt
 import time
-import json
 import logging
-import uuid # Importar uuid para generar IDs únicos
+import uuid
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class MQTTClient:
-    # Generar un client_id único para cada instancia
-    def __init__(self, broker_address, port=1883, username=None, password=None, client_id_prefix="smart_home_ai_client"):
-        self.client_id = f"{client_id_prefix}-{uuid.uuid4().hex[:8]}" # Añadir un sufijo único
-        logging.info(f"Inicializando clase MQTTClient con ID: {self.client_id}...") 
-        self.broker_address = str(broker_address) 
+    def __init__(self, broker_address, port, username, password):
+        self.broker_address = broker_address
         self.port = port
         self.username = username
         self.password = password
-        self.client = mqtt.Client(client_id=self.client_id, protocol=mqtt.MQTTv311, clean_session=True) 
-        self.on_message_callback = None 
-
+        self.client_id = f"smart_home_ai_client-{uuid.uuid4().hex[:8]}" # ID único para el cliente
+        self.client = mqtt.Client(client_id=self.client_id, protocol=mqtt.MQTTv311)
+        
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.on_disconnect = self._on_disconnect
+        self.client.on_publish = self._on_publish
+        
+        self.client.username_pw_set(self.username, self.password)
+        logging.info(f"Inicializando clase MQTTClient con ID: {self.client_id}...")
 
-        if self.username and self.password:
-            self.client.username_pw_set(self.username, self.password)
+        self.message_callbacks = []
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             logging.info(f"Conectado exitosamente al broker MQTT en {self.broker_address}:{self.port}")
         else:
-            logging.error(f"Fallo al conectar al broker MQTT, código de retorno: {rc}")
-            
+            logging.error(f"Fallo al conectar al broker MQTT, código: {rc}")
+
     def _on_message(self, client, userdata, msg):
-        logging.info(f"Mensaje MQTT recibido: Tópico='{msg.topic}', Payload='{msg.payload.decode()}'")
-        if self.on_message_callback:
-            try:
-                payload_decoded = msg.payload.decode('utf-8')
-                try:
-                    payload_json = json.loads(payload_decoded)
-                    self.on_message_callback(msg.topic, payload_json)
-                except json.JSONDecodeError:
-                    self.on_message_callback(msg.topic, payload_decoded)
-            except Exception as e:
-                logging.error(f"Error al procesar mensaje MQTT en callback: {e}")
+        decoded_payload = msg.payload.decode(errors='ignore')
+        logging.info(f"Mensaje MQTT recibido: Tópico='{msg.topic}', Payload='{decoded_payload}'")
+        
+        for callback_func in self.message_callbacks:
+            callback_func(msg.topic, decoded_payload)
 
     def _on_disconnect(self, client, userdata, rc):
-        logging.warning(f"Desconectado del broker MQTT con código: {rc}.")
-        if rc != 0: 
+        if rc != 0:
+            logging.warning(f"Desconectado del broker MQTT con código: {rc}.")
             logging.warning("Intentando reconectar en 5 segundos...")
-            time.sleep(5) 
+            time.sleep(5)
             try:
-                self.client.reconnect() 
+                self.client.reconnect()
                 logging.info("Reconexión MQTT iniciada.")
             except Exception as e:
                 logging.error(f"Error al intentar reconectar MQTT: {e}")
         else:
             logging.info("Desconexión MQTT limpia.")
 
-    def set_message_callback(self, callback_func):
-        self.on_message_callback = callback_func
+    def _on_publish(self, client, userdata, mid):
+        """
+        Callback que se llama cuando un mensaje PUBLISH ha sido enviado al broker.
+        """
+        logging.info(f"Mensaje MQTT publicado exitosamente (MID: {mid}).")
 
     def connect(self):
         try:
+            self.client.loop_start()
             self.client.connect(self.broker_address, self.port, 60)
-            self.client.loop_start() 
             logging.info("Bucle de MQTT iniciado en segundo plano.")
         except Exception as e:
-            logging.error(f"Error al iniciar la conexión MQTT: {e}")
+            logging.error(f"Error al conectar o iniciar bucle MQTT: {e}")
+
+    def publish(self, topic, payload, qos=0, retain=False):
+        try:
+            info = self.client.publish(topic, payload, qos, retain)
+            info.wait_for_publish()
+            logging.info(f"Mensaje MQTT publicado: Tópico='{topic}', Payload='{payload[:50]}...'")
+            return True
+        except Exception as e:
+            logging.error(f"Error al publicar mensaje MQTT: {e}")
+            return False
+
+    def subscribe(self, topic, qos=0):
+        self.client.subscribe(topic, qos)
+        logging.info(f"Suscrito al tópico MQTT: {topic}")
 
     def disconnect(self):
         self.client.loop_stop()
         self.client.disconnect()
         logging.info("Cliente MQTT desconectado.")
 
-    def publish(self, topic, payload, qos=0, retain=False):
-        try:
-            if isinstance(payload, dict) or isinstance(payload, list):
-                payload = json.dumps(payload) 
-            
-            self.client.publish(topic, payload, qos, retain)
-            logging.info(f"Mensaje MQTT publicado: Tópico='{topic}', Payload='{payload[:100]}...'")
-        except Exception as e:
-            logging.error(f"Error al publicar mensaje MQTT: {e}")
+    def register_message_callback(self, callback_func):
+        self.message_callbacks.append(callback_func)
 
-    def subscribe(self, topic, qos=0):
-        try:
-            self.client.subscribe(topic, qos)
-            logging.info(f"Suscrito al tópico MQTT: '{topic}'")
-        except Exception as e:
-            logging.error(f"Error al suscribirse al tópico MQTT '{topic}': {e}")
+    def subscribe_to_all_ha_topics(self, base_topic: str): # ¡base_topic como argumento!
+        """
+        Se suscribe a todos los tópicos bajo el tópico base de Home Assistant.
+        Esto nos permitirá ver todos los mensajes de estado y descubrimiento de HA.
+        """
+        full_topic = f"{base_topic}/#" # Usar el argumento base_topic
+        self.subscribe(full_topic)
+        logging.info(f"Suscrito a todos los tópicos de Home Assistant: {full_topic}")
 
-if __name__ == "__main__":
-    BROKER_ADDRESS_TEST = "192.168.1.11" 
-    BROKER_PORT_TEST = 1883 
-    MQTT_USERNAME_TEST = "leo"
-    MQTT_PASSWORD_TEST = "Kolke.2576"
-
-    mqtt_client_test = MQTTClient(BROKER_ADDRESS_TEST, BROKER_PORT_TEST, MQTT_USERNAME_TEST, MQTT_PASSWORD_TEST)
-
-    def handle_incoming_message(topic, payload):
-        print(f"Callback de la aplicación: Recibido en {topic}: {payload}")
-
-    mqtt_client_test.set_message_callback(handle_incoming_message)
-    mqtt_client_test.connect()
-
-    time.sleep(2) 
-    mqtt_client_test.publish("home/test/status", "Hello from Smart Home AI!")
-    mqtt_client_test.publish("home/light/living_room/set", {"state": "ON", "brightness": 255})
-    mqtt_client_test.subscribe("home/+/status")
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Desconectando MQTT...")
-        mqtt_client_test.disconnect()
-        print("Desconectado.")
