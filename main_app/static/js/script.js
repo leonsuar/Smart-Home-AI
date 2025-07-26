@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmSaveYesButton = document.getElementById('confirm-save-yes');
     const confirmSaveNoButton = document.getElementById('confirm-save-no');
 
-    // Elementos del cuadro de mensaje genérico (sigue siendo un modal)
+    // Elementos del cuadro de mensaje general (sigue siendo un modal)
     const messageBox = document.getElementById('messageBox');
     const messageText = document.getElementById('messageText');
     const messageBoxCloseButton = document.getElementById('messageBoxCloseButton');
@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listener para cerrar el cuadro de mensaje
     messageBoxCloseButton.addEventListener('click', () => {
+        console.log("messageBoxCloseButton clicked"); // Depuración
         messageBox.classList.add('hidden');
     });
 
@@ -67,7 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
             data.estado_red.filter(entry => entry.tipo && entry.tipo.startsWith("Sistema")).forEach(entry => {
                 const p = document.createElement('p');
                 p.className = 'text-sm text-gray-300';
-                p.textContent = `${entry.tipo}: ${entry.valor}`; // Solo mostrar tipo y valor
+                // La estructura de estado_red en el backend es {"tipo": "...", "valor": ...}
+                // Si el valor es un objeto, Object.entries(entry).filter(([key]) => key !== 'tipo').map(([key, value]) => `${key}: ${value}`).join(', ')
+                // Si el valor es simple, `${entry.tipo}: ${entry.valor}`
+                // Basado en tu app.py, `estado_red` tiene "tipo" y "valor" simples.
+                p.textContent = `${entry.tipo}: ${entry.valor}`; 
                 systemInfoSection.appendChild(p);
             });
 
@@ -92,13 +97,22 @@ document.addEventListener('DOMContentLoaded', () => {
             // Actualizar Mapeo de Comandos Tasmota
             tasmotaMapList.innerHTML = '';
             if (data.tasmota_map && Object.keys(data.tasmota_map).length > 0) {
-                for (const entityId in data.tasmota_map) {
-                    const info = data.tasmota_map[entityId];
-                    const li = document.createElement('li');
-                    li.className = 'device-list-item';
-                    li.innerHTML = `<strong>${entityId}</strong><br>
-                                    Prefijo Comando: ${info.command_topic_prefix || 'N/A'} | Sufijo Power: ${info.power_topic_suffix || 'N/A'}`;
-                    tasmotaMapList.appendChild(li);
+                for (const friendlyName in data.tasmota_map) { // Iterar por el nombre amigable
+                    const entityId = data.tasmota_map[friendlyName]; // El valor es el entity_id
+                    // Necesitamos la información completa de la entidad para mostrarla
+                    const entityInfo = data.discovered_entities[entityId]; 
+                    if (entityInfo) {
+                        const li = document.createElement('li');
+                        li.className = 'device-list-item';
+                        li.innerHTML = `<strong>${friendlyName}</strong> (Mapeado a: ${entityId})<br>
+                                        Dominio: ${entityInfo.domain || 'N/A'} | Cmd Tópico: ${entityInfo.command_topic || 'N/A'}`;
+                        tasmotaMapList.appendChild(li);
+                    } else {
+                        const li = document.createElement('li');
+                        li.className = 'device-list-item';
+                        li.textContent = `Mapeo: ${friendlyName} -> ${entityId} (Entidad no encontrada)`;
+                        tasmotaMapList.appendChild(li);
+                    }
                 }
             } else {
                 const li = document.createElement('li');
@@ -109,8 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Error al obtener log y estado:', error);
-            // No mostrar showMessageBox aquí para evitar que aparezca constantemente en errores de red
-            // addLogEntryToUI({ tiempo: new Date().toISOString().slice(0, 19).replace('T', ' '), tipo: 'error', fuente: 'System', mensaje: `Error al conectar con el servidor: ${error.message}` });
+            showMessageBox('Error al cargar el log o el estado del sistema. Revisa la consola para más detalles.');
+            addLogEntryToUI({ tiempo: new Date().toISOString().slice(0, 19).replace('T', ' '), tipo: 'error', fuente: 'System', mensaje: `Error al conectar con el servidor: ${error.message}` });
         }
     }
 
@@ -135,6 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // La actualización del log la maneja fetchLogAndState() en el intervalo.
             // Solo necesitamos manejar la confirmación de guardado.
+            addLogEntryToUI({ tiempo: new Date().toISOString().slice(0, 19).replace('T', ' '), tipo: 'ia', fuente: 'AI', mensaje: data.response_text });
+
 
             if (data.should_offer_to_save) {
                 showSaveConfirmation();
@@ -146,16 +162,22 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error al enviar comando:', error);
             showMessageBox('Error de comunicación con el servidor. Revisa la consola.');
-            addLogEntryToUI({ tiempo: new Date().toISOString().slice(0, 19).replace('T', ' '), tipo: 'error', fuente: 'System', mensaje: `Error al enviar comando: ${error.message}` });
+            addLogEntryToUI({ tiempo: new Date().toISOString().slice(0, 19).replace('T', ' '), tipo: 'error', fuente: 'System', mensaje: `Error de comunicación: ${error.message}` });
         }
     }
 
     function showSaveConfirmation() {
         isSavingConfirmed = false; // Resetear la bandera para la nueva interacción
         saveConfirmationContainer.classList.remove('hidden'); // Mostrar el contenedor de confirmación
+        // Asegurarse de que los event listeners estén adjuntos
+        // Estos ya están adjuntos en DOMContentLoaded, pero reasignarlos no hace daño
+        // y asegura que la lógica de "isSavingConfirmed" se respete.
+        document.getElementById('confirm-save-yes').onclick = () => sendSaveChoice('yes');
+        document.getElementById('confirm-save-no').onclick = () => sendSaveChoice('no');
     }
 
     async function sendSaveChoice(choice) {
+        console.log("sendSaveChoice called with:", choice); // Depuración
         if (isSavingConfirmed) return; // Evitar múltiples envíos
         isSavingConfirmed = true;
 
@@ -182,9 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
             sendCommand();
         }
     });
-
-    confirmSaveYesButton.addEventListener('click', () => sendSaveChoice('yes'));
-    confirmSaveNoButton.addEventListener('click', () => sendSaveChoice('no'));
 
     // Cargar log y estado al iniciar y cada pocos segundos
     fetchLogAndState();

@@ -1,1 +1,30 @@
-[]
+[
+    {
+        "command": "Prender luz biblioteca",
+        "response": "Comando 'ON' enviado directamente a 'TasmotaBiblioteca' (Tasmota)."
+    },
+    {
+        "command": "Hola",
+        "response": "Hola"
+    },
+    {
+        "command": "Apagar luz biblioteca",
+        "response": "Comando 'OFF' enviado directamente a 'TasmotaBiblioteca' (Tasmota)."
+    },
+    {
+        "command": "Puedes apagar la luz biblioteca?",
+        "response": "Comando 'OFF' enviado directamente a 'TasmotaBiblioteca' (Tasmota)."
+    },
+    {
+        "command": "Puedes prender la luz biblioteca?",
+        "response": "Comando 'ON' enviado directamente a 'TasmotaBiblioteca' (Tasmota)."
+    },
+    {
+        "command": "Apaga la luz biblioteca",
+        "response": "Comando 'OFF' enviado directamente a 'TasmotaBiblioteca' (Tasmota)."
+    },
+    {
+        "command": "Prende luz biblioteca",
+        "response": "Comando 'ON' enviado directamente a 'TasmotaBiblioteca' (Tasmota)."
+    }
+]
