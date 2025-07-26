@@ -1,23 +1,27 @@
-# Dockerfile_ml (ubicado en ~/Smart-Home-AI/ml_server/Dockerfile_ml)
+    # Dockerfile_ml
+    FROM python:3.9-slim-bullseye
 
-FROM python:3.9-slim-bullseye
+    # Establecer el directorio de trabajo dentro del contenedor
+    WORKDIR /app
 
-WORKDIR /app
+    # Instalar dependencias del sistema necesarias para algunas librerías Python
+    RUN apt-get update && \
+        apt-get install -y --no-install-recommends python-is-python3 && \
+        rm -rf /var/lib/apt/lists/*
 
-# Instalar dependencias del sistema si es necesario
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python-is-python3 && \
-    rm -rf /var/lib/apt/lists/*
+    # Copiar el archivo de requisitos del servidor ML y luego instalar las dependencias de Python.
+    COPY ml_server/requirements_ml.txt .
+    RUN pip install --no-cache-dir -r requirements_ml.txt
 
-# Copiar el archivo de requisitos del servidor ML y luego instalar las dependencias de Python.
-COPY ml_server/requirements_ml.txt .
-RUN pip install --no-cache-dir -r requirements_ml.txt
+    # Copiar el código del servidor ML
+    COPY ml_server/ /app/ml_server/
 
-# Copiar el código de la aplicación del servidor ML
-COPY ml_server/ml_server.py ./ml_server/
+    # ¡NUEVA LÍNEA CRÍTICA! Añadir /app al PYTHONPATH
+    ENV PYTHONPATH=/app
 
-# Copiar la lógica central (código compartido)
-COPY core_logic/ ./core_logic/
+    # Exponer el puerto en el que se ejecutará el servidor Flask
+    EXPOSE 5001
 
-# Establecer el punto de entrada para el servidor ML con la ruta completa a python
-CMD ["/usr/local/bin/python", "ml_server/ml_server.py"]
+    # Comando para ejecutar el servidor ML cuando el contenedor se inicie
+    CMD ["python", "ml_server/ml_server.py"]
+    

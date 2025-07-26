@@ -1,27 +1,31 @@
-# Dockerfile_app (ubicado en ~/Smart-Home-AI/main_app/Dockerfile_app)
+    # Dockerfile_app
+    FROM python:3.9-slim-bullseye
 
-FROM python:3.9-slim-bullseye
+    # Establecer el directorio de trabajo dentro del contenedor
+    WORKDIR /app
 
-WORKDIR /app
+    # Instalar dependencias del sistema necesarias para algunas librerías Python
+    RUN apt-get update && \
+        apt-get install -y --no-install-recommends python-is-python3 && \
+        rm -rf /var/lib/apt/lists/*
 
-# Instalar dependencias del sistema si es necesario
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python-is-python3 && \
-    rm -rf /var/lib/apt/lists/*
+    # Copiar el archivo de requisitos de la aplicación y luego instalar las dependencias de Python.
+    COPY main_app/requirements_app.txt .
+    RUN pip install --no-cache-dir -r requirements_app.txt
 
-# Copiar el archivo de requisitos de la aplicación y luego instalar las dependencias de Python.
-COPY main_app/requirements_app.txt .
-RUN pip install --no-cache-dir -r requirements_app.txt
+    # Copiar el código de la aplicación principal, plantillas y archivos estáticos
+    COPY main_app/ /app/main_app/
+    COPY core_logic/ /app/core_logic/
 
-# Copiar el código de la aplicación principal, plantillas y archivos estáticos
-COPY main_app/app.py ./main_app/
-COPY main_app/static/ ./main_app/static/
-COPY main_app/templates/ ./main_app/templates/
+    # ¡NUEVA LÍNEA CRÍTICA! Añadir /app al PYTHONPATH para que Python encuentre los módulos
+    ENV PYTHONPATH=/app
 
-# Copiar la lógica central (código compartido)
-COPY core_logic/ ./core_logic/
+    # El volumen montado en docker-compose.yml se encargará de la carpeta knowledge.
+    # No necesitamos copiarla aquí directamente.
 
-# El directorio 'knowledge' se maneja mediante un montaje de volumen en docker-compose.yml.
+    # Exponer el puerto en el que se ejecutará la aplicación Flask
+    EXPOSE 5000
 
-# Establecer el punto de entrada para la aplicación principal con la ruta completa a python
-CMD ["/usr/local/bin/python", "main_app/app.py"]
+    # Comando para ejecutar la aplicación cuando el contenedor se inicie
+    CMD ["python", "main_app/app.py"]
+    

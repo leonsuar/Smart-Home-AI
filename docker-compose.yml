@@ -1,40 +1,48 @@
-version: '3.8'
+    # docker-compose.yml
+    # La línea 'version' es obsoleta y se puede eliminar para evitar advertencias.
+    # version: '3.8' 
 
-services:
-  main_app:
-    build:
-      context: . # Contexto de construcción en la raíz del proyecto
-      dockerfile: main_app/Dockerfile_app # Ruta al Dockerfile relativa al contexto
-    volumes:
-      # Montamos los directorios directamente para desarrollo local
-      - ./main_app:/app/main_app
-      - ./knowledge:/app/knowledge
-      - ./core_logic:/app/core_logic # Montado para main_app
-    environment:
-      - FLASK_ENV=development
-      - PYTHONPATH=/app # ¡Añadido para que Python encuentre core_logic!
-      - GEMINI_API_KEY=AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU
-      # Las variables MQTT/ML_SERVER se leen de config.json en tu código,
-      # por lo que no se necesitan aquí si el network_mode es host.
-    network_mode: host # El contenedor usa directamente los puertos del host
-    depends_on:
-      - ml_server
-    dns: # Configuración DNS para NTP y resolución de nombres
-      - 192.168.1.10 # Tu servidor NTP/DNS local
-      - 8.8.8.8      # DNS de respaldo (Google DNS)
+    services:
+      main_app:
+        build:
+          context: .
+          # ¡CORRECCIÓN CRÍTICA AQUÍ! Especificar la ruta correcta al Dockerfile
+          dockerfile: main_app/Dockerfile_app 
+        container_name: smart-home-ai-main_app-1
+        ports:
+          - "5000:5000"
+        volumes:
+          # Montar el volumen para la memoria de la IA y la configuración.
+          # Asegúrate de que la carpeta 'knowledge' exista en tu host en ~/Smart-Home-AI/knowledge
+          - ./knowledge:/app/knowledge 
+        environment:
+          # Estas variables de entorno se usan para configurar el cliente MQTT.
+          # Asegúrate de que los valores sean correctos para tu broker MQTT.
+          MQTT_BROKER_ADDRESS: 192.168.1.11
+          MQTT_BROKER_PORT: 1883
+          MQTT_USERNAME: leo
+          MQTT_PASSWORD: Kolke.2576
+          # La clave de la API de Gemini.
+          GEMINI_API_KEY: AIzaSyA_iF4rVbLVprHCbsiSGshFxFu8CXSsGvU
+          # NO definir ML_SERVER_INTERNAL_IP aquí. El valor por defecto 'ml_server' en app.py
+          # es el nombre del servicio Docker y es la forma correcta de comunicación interna.
+        networks:
+          - smart_home_network # Conectar al servicio ml_server a través de esta red
+        depends_on:
+          - ml_server # Asegura que ml_server se inicie antes que main_app
 
-  ml_server:
-    build:
-      context: . # ¡También el contexto de construcción es la raíz del proyecto!
-      dockerfile: ml_server/Dockerfile_ml # Ruta al Dockerfile relativa al nuevo contexto
-    volumes:
-      # Montamos los directorios directamente para desarrollo local
-      - ./ml_server:/app/ml_server # Cambiado el destino a /app/ml_server para consistencia
-      - ./core_logic:/app/core_logic # ¡Montado para ml_server también!
-    environment:
-      - FLASK_ENV=development
-      - PYTHONPATH=/app # ¡Añadido para que Python encuentre core_logic!
-    network_mode: host
-    dns: # Configuración DNS para NTP y resolución de nombres
-      - 192.168.1.10 # Tu servidor NTP/DNS local
-      - 8.8.8.8      # DNS de respaldo (Google DNS)
+      ml_server:
+        build:
+          context: .
+          # ¡CORRECCIÓN CRÍTICA AQUÍ! Especificar la ruta correcta al Dockerfile
+          dockerfile: ml_server/Dockerfile_ml 
+        container_name: smart-home-ai-ml_server-1
+        ports:
+          - "5001:5001"
+        networks:
+          - smart_home_network # Conectar al servicio main_app a través de esta red
+
+    networks:
+      smart_home_network:
+        driver: bridge # Define una red de tipo bridge para la comunicación entre contenedores
+    
